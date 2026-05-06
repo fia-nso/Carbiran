@@ -1,0 +1,97 @@
+Résumé frontend Carburant / Supabase
+
+Stack
+- React 19 + TypeScript + Vite
+- Supabase JS (@supabase/supabase-js)
+- Tailwind / Radix UI / SweetAlert2
+- Auth + routes protégées
+
+Connexion Supabase
+- fichier : src/supabaseClient.ts
+- export const supabase = createClient(supabaseUrl, supabaseKey)
+- utilise l’URL et la clé de projet Supabase
+- auth Supabase pour login / session
+
+Interfaces TypeScript
+interface Vehicule {
+  id: number;
+  vehicule: string;
+  matricule: string;
+  utilisationAffectation: string;
+  chauffeurResponsable?: string | null;
+  zone: "Zone A" | "Zone B" | string;
+}
+
+export interface RavitaillementVehicule {
+  dateSituation: string; // ex : "23/04/2026"
+  dateRavitaillement: string; // ex : "24/04/2026"
+  vehicule: Vehicule;
+  montantPrevu: number;
+  montantRavitaille: number;
+  statue: "EN_ATTEND_SITUATION" | "VALIDE" | "BON_RETOUNREE" | "CASH";
+  nLiter: number;
+}
+
+Pages principales
+1. CRUD Véhicule
+   - création / lecture / modification / suppression de véhicules
+   - champs : vehicule, matricule, utilisationAffectation, chauffeurResponsable, zone
+   - page dédiée pour gérer le parc des véhicules
+
+2. Home page RavitaillementVehicule
+   - CRUD des ravitaillements véhicules
+   - filtrage : dateSituation OU dateRavitaillement
+   - recherche générale : vehicule nom, matricule, chauffeurResponsable
+   - actions : valider, marquer bon retourné, paiement cash, etc.
+
+3. Dashboard
+   - statistiques clés
+   - total litres ravitaillés
+   - montants prévus vs montants réels
+   - nombre de ravitaillements par zone / par véhicule
+   - état des ravitaillements (EN_ATTEND_SITUATION, VALIDE, BON_RETOUNREE, CASH)
+
+Gestion des rôles
+- Admin : tous les droits, y compris gestion des utilisateurs
+- MENAGER : tous les droits sauf gestion utilisateurs
+- viewer : consultation seule, peut voir toutes les pages mais pas modifier
+
+Implémentation / flux
+- AuthProvider / useAuth.ts : gestion de la session et des rôles
+- RouteProtected / RequireRole : protège les routes selon authentification et rôle
+- AppRouter : organise les routes publiques et privées
+- Header : logout et affichage utilisateur
+
+Tables Supabase suggérées
+1. vehicules
+   - id (int, pk)
+   - vehicule (text)
+   - matricule (text)
+   - utilisation_affectation (text)
+   - chauffeur_responsable (text, nullable)
+   - zone (text)
+
+2. ravitaillements_vehicules
+   - id (int, pk)
+   - date_situation (date/text)
+   - date_ravitaillement (date/text)
+   - vehicule_id (fk -> vehicules.id)
+   - montant_prevu (numeric)
+   - montant_ravitaille (numeric)
+   - statut (text)
+   - n_liter (numeric)
+   - created_at / updated_at
+
+3. users / profiles
+   - id (uuid)
+   - email
+   - role ("Admin", "MENAGER", "viewer")
+
+Points importants
+- Utiliser les APIs Supabase pour fetch, insert, update, delete
+- Mettre à jour l’UI en temps réel si besoin avec Supabase Realtime
+- Validation des formulaires côté frontend
+- Filtrage multi-critères sur la home page
+- Dashboard simple avec graphiques ou cartes de stats
+
+Ce fichier décrit l’architecture frontend et les besoins pour une application de gestion carburant connectée à Supabase.
