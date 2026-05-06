@@ -27,7 +27,7 @@ interface RavitaillementVehiculeRow {
   n_liter: number | string;
   created_at?: string;
   updated_at?: string;
-  vehicule?: VehiculeRow | null;
+  vehicule?: VehiculeRow | VehiculeRow[] | null;
 }
 
 interface RavitaillementVehiculePayload {
@@ -52,12 +52,14 @@ function mapVehiculeRow(row: VehiculeRow): Vehicule {
 }
 
 function mapRavitaillementRow(row: RavitaillementVehiculeRow): RavitaillementVehicule {
+  const vehiculeRow = Array.isArray(row.vehicule) ? row.vehicule[0] || null : row.vehicule || null;
+
   return {
     id: row.id,
     dateSituation: row.date_situation,
     dateRavitaillement: row.date_ravitaillement,
     vehiculeId: row.vehicule_id,
-    vehicule: row.vehicule ? mapVehiculeRow(row.vehicule) : null,
+    vehicule: vehiculeRow ? mapVehiculeRow(vehiculeRow) : null,
     montantPrevu: Number(row.montant_prevu || 0),
     montantRavitaille: Number(row.montant_ravitaille || 0),
     statut: row.statut,
@@ -103,7 +105,7 @@ export function useRavitaillementsVehicule() {
       }
 
       setRavitaillements(
-        ((data as RavitaillementVehiculeRow[] | null) || []).map(mapRavitaillementRow)
+        ((data as unknown as RavitaillementVehiculeRow[] | null) || []).map(mapRavitaillementRow)
       );
     } catch (error) {
       console.error("Erreur chargement ravitaillements vehicules:", error);
