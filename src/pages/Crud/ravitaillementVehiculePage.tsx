@@ -654,6 +654,7 @@ export default function RavitaillementVehiculePage() {
                         <td className="px-6 py-4 text-gray-700">
                           <div>Prevu: {formatNumber(item.montantPrevu)}</div>
                           <div>Rav.: {formatNumber(item.montantRavitaille)}</div>
+                          <div>Reliquat: {formatNumber(item.montantPrevu - item.montantRavitaille)}</div>
                         </td>
                         <td className="px-6 py-4 text-gray-700">{formatNumber(item.nLiter)}</td>
                         <td className="px-6 py-4">
