@@ -60,9 +60,9 @@ function formatAmount(value: number) {
   }).format(value);
 }
 
-function formatLitres(value: number) {
+function formatMetric(value: number) {
   return new Intl.NumberFormat("fr-FR", {
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value);
 }
@@ -74,15 +74,10 @@ export default function DashboardPage() {
     const years = new Set<number>();
 
     for (const item of ravitaillements) {
-      const situationYear = extractYear(item.dateSituation);
-      const ravitaillementYear = extractYear(item.dateRavitaillement);
+      const year = extractYear(item.date);
 
-      if (situationYear) {
-        years.add(situationYear);
-      }
-
-      if (ravitaillementYear) {
-        years.add(ravitaillementYear);
+      if (year) {
+        years.add(year);
       }
     }
 
@@ -102,54 +97,39 @@ export default function DashboardPage() {
   const monthlyRows = useMemo(() => {
     const rows = monthLabels.map((label) => ({
       month: label,
-      nbPrevu: 0,
-      nbRealise: 0,
-      montantPrevu: 0,
+      nbRavitaillements: 0,
       montantRavitaille: 0,
-      reliquat: 0,
       litres: 0,
+      kilometrage: 0,
     }));
 
     for (const item of ravitaillements) {
-      const situationYear = extractYear(item.dateSituation);
-      const situationMonth = extractMonthIndex(item.dateSituation);
-      const ravitaillementYear = extractYear(item.dateRavitaillement);
-      const ravitaillementMonth = extractMonthIndex(item.dateRavitaillement);
+      const year = extractYear(item.date);
+      const month = extractMonthIndex(item.date);
 
-      if (situationYear === effectiveYear && situationMonth !== null) {
-        rows[situationMonth].nbPrevu += 1;
-        rows[situationMonth].montantPrevu += item.montantPrevu;
-      }
-
-      if (ravitaillementYear === effectiveYear && ravitaillementMonth !== null) {
-        rows[ravitaillementMonth].nbRealise += 1;
-        rows[ravitaillementMonth].montantRavitaille += item.montantRavitaille;
-        rows[ravitaillementMonth].litres += item.nLiter;
+      if (year === effectiveYear && month !== null) {
+        rows[month].nbRavitaillements += 1;
+        rows[month].montantRavitaille += item.montantRavitaille;
+        rows[month].litres += item.nLiter;
+        rows[month].kilometrage += item.kilometrage;
       }
     }
 
-    return rows.map((row) => ({
-      ...row,
-      reliquat: row.montantPrevu - row.montantRavitaille,
-    }));
+    return rows;
   }, [effectiveYear, ravitaillements]);
 
   const totals = monthlyRows.reduce(
     (acc, row) => ({
-      nbPrevu: acc.nbPrevu + row.nbPrevu,
-      nbRealise: acc.nbRealise + row.nbRealise,
-      montantPrevu: acc.montantPrevu + row.montantPrevu,
+      nbRavitaillements: acc.nbRavitaillements + row.nbRavitaillements,
       montantRavitaille: acc.montantRavitaille + row.montantRavitaille,
-      reliquat: acc.reliquat + row.reliquat,
       litres: acc.litres + row.litres,
+      kilometrage: acc.kilometrage + row.kilometrage,
     }),
     {
-      nbPrevu: 0,
-      nbRealise: 0,
-      montantPrevu: 0,
+      nbRavitaillements: 0,
       montantRavitaille: 0,
-      reliquat: 0,
       litres: 0,
+      kilometrage: 0,
     }
   );
 
@@ -165,7 +145,7 @@ export default function DashboardPage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
                 <p className="text-gray-600 mt-1">
-                  Synthese annuelle par mois des ravitaillements.
+                  Synthese mensuelle des ravitaillements, des montants, des litres et du kilometrage.
                 </p>
               </div>
             </div>
@@ -191,20 +171,20 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
             <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
-              <p className="text-sm text-green-700 font-medium">Nb prevu</p>
-              <p className="text-3xl font-bold text-green-900 mt-2">{formatCount(totals.nbPrevu)}</p>
-            </div>
-            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5">
-              <p className="text-sm text-teal-700 font-medium">Nb realise</p>
-              <p className="text-3xl font-bold text-teal-900 mt-2">{formatCount(totals.nbRealise)}</p>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-              <p className="text-sm text-amber-700 font-medium">Montant prevu</p>
-              <p className="text-3xl font-bold text-amber-900 mt-2">{formatAmount(totals.montantPrevu)}</p>
+              <p className="text-sm text-green-700 font-medium">Nb ravitaillements</p>
+              <p className="text-3xl font-bold text-green-900 mt-2">{formatCount(totals.nbRavitaillements)}</p>
             </div>
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
               <p className="text-sm text-orange-700 font-medium">Montant ravitaille</p>
               <p className="text-3xl font-bold text-orange-900 mt-2">{formatAmount(totals.montantRavitaille)}</p>
+            </div>
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5">
+              <p className="text-sm text-teal-700 font-medium">Litres</p>
+              <p className="text-3xl font-bold text-teal-900 mt-2">{formatMetric(totals.litres)}</p>
+            </div>
+            <div className="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
+              <p className="text-sm text-cyan-700 font-medium">Kilometrage</p>
+              <p className="text-3xl font-bold text-cyan-900 mt-2">{formatMetric(totals.kilometrage)}</p>
             </div>
           </div>
         </div>
@@ -219,31 +199,27 @@ export default function DashboardPage() {
               <thead className="bg-gradient-to-r from-green-600 to-teal-700">
                 <tr>
                   <th className="px-4 py-4 text-left text-sm font-semibold text-white">Mois</th>
-                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Nb prevu</th>
-                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Nb realise</th>
-                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Montant prevu</th>
+                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Nb ravitaillements</th>
                   <th className="px-4 py-4 text-left text-sm font-semibold text-white">Montant ravitaille</th>
-                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Reliquat</th>
                   <th className="px-4 py-4 text-left text-sm font-semibold text-white">Litres</th>
+                  <th className="px-4 py-4 text-left text-sm font-semibold text-white">Kilometrage</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-gray-600">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-600">
                       Chargement de la synthese...
                     </td>
                   </tr>
                 ) : (
                   monthlyRows.map((row) => (
-                    <tr key={row.month} className="hover:bg-blue-50/40 transition-colors duration-150">
+                    <tr key={row.month} className="hover:bg-green-50/50 transition-colors duration-150">
                       <td className="px-4 py-3 font-medium text-gray-900">{row.month}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatCount(row.nbPrevu)}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatCount(row.nbRealise)}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatAmount(row.montantPrevu)}</td>
+                      <td className="px-4 py-3 text-gray-700">{formatCount(row.nbRavitaillements)}</td>
                       <td className="px-4 py-3 text-gray-700">{formatAmount(row.montantRavitaille)}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatAmount(row.reliquat)}</td>
-                      <td className="px-4 py-3 text-gray-700">{formatLitres(row.litres)}</td>
+                      <td className="px-4 py-3 text-gray-700">{formatMetric(row.litres)}</td>
+                      <td className="px-4 py-3 text-gray-700">{formatMetric(row.kilometrage)}</td>
                     </tr>
                   ))
                 )}
@@ -251,12 +227,10 @@ export default function DashboardPage() {
               <tfoot className="bg-amber-50 border-t-2 border-amber-200">
                 <tr>
                   <td className="px-4 py-4 text-lg font-bold text-gray-900">Total</td>
-                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatCount(totals.nbPrevu)}</td>
-                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatCount(totals.nbRealise)}</td>
-                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatAmount(totals.montantPrevu)}</td>
+                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatCount(totals.nbRavitaillements)}</td>
                   <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatAmount(totals.montantRavitaille)}</td>
-                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatAmount(totals.reliquat)}</td>
-                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatLitres(totals.litres)}</td>
+                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatMetric(totals.litres)}</td>
+                  <td className="px-4 py-4 text-lg font-bold text-blue-700">{formatMetric(totals.kilometrage)}</td>
                 </tr>
               </tfoot>
             </table>

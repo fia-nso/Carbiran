@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/supabaseClient";
 import { writeActivityLogSafe } from "@/lib/activityLogs";
-import type {
-  RavitaillementVehicule,
-  StatutRavitaillementVehicule,
-  Vehicule,
-} from "@/types";
+import type { RavitaillementVehicule, Vehicule } from "@/types";
 
 interface VehiculeRow {
   id: number;
@@ -18,12 +14,11 @@ interface VehiculeRow {
 
 interface RavitaillementVehiculeRow {
   id: number;
-  date_situation: string | null;
-  date_ravitaillement: string | null;
+  date: string | null;
   vehicule_id: number;
-  montant_prevu: number | string;
   montant_ravitaille: number | string;
-  statut: StatutRavitaillementVehicule;
+  commentaire: string | null;
+  kilometrage: number | string;
   n_liter: number | string;
   created_at?: string;
   updated_at?: string;
@@ -31,12 +26,11 @@ interface RavitaillementVehiculeRow {
 }
 
 interface RavitaillementVehiculePayload {
-  dateSituation: string | null;
-  dateRavitaillement: string | null;
+  date: string | null;
   vehiculeId: number;
-  montantPrevu: number;
   montantRavitaille: number;
-  statut: StatutRavitaillementVehicule;
+  commentaire: string;
+  kilometrage: number;
   nLiter: number;
 }
 
@@ -56,13 +50,12 @@ function mapRavitaillementRow(row: RavitaillementVehiculeRow): RavitaillementVeh
 
   return {
     id: row.id,
-    dateSituation: row.date_situation,
-    dateRavitaillement: row.date_ravitaillement,
+    date: row.date,
     vehiculeId: row.vehicule_id,
     vehicule: vehiculeRow ? mapVehiculeRow(vehiculeRow) : null,
-    montantPrevu: Number(row.montant_prevu || 0),
     montantRavitaille: Number(row.montant_ravitaille || 0),
-    statut: row.statut,
+    commentaire: row.commentaire || "",
+    kilometrage: Number(row.kilometrage || 0),
     nLiter: Number(row.n_liter || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -71,12 +64,11 @@ function mapRavitaillementRow(row: RavitaillementVehiculeRow): RavitaillementVeh
 
 function buildRavitaillementPayload(payload: RavitaillementVehiculePayload) {
   return {
-    date_situation: payload.dateSituation,
-    date_ravitaillement: payload.dateRavitaillement,
+    date: payload.date,
     vehicule_id: payload.vehiculeId,
-    montant_prevu: payload.montantPrevu,
     montant_ravitaille: payload.montantRavitaille,
-    statut: payload.statut,
+    commentaire: payload.commentaire,
+    kilometrage: payload.kilometrage,
     n_liter: payload.nLiter,
   };
 }
@@ -95,9 +87,9 @@ export function useRavitaillementsVehicule() {
       const { data, error } = await supabase
         .from("ravitaillements_vehicules")
         .select(
-          "id, date_situation, date_ravitaillement, vehicule_id, montant_prevu, montant_ravitaille, statut, n_liter, created_at, updated_at, vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone)"
+          "id, date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter, created_at, updated_at, vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone)"
         )
-        .order("date_ravitaillement", { ascending: false })
+        .order("date", { ascending: false, nullsFirst: false })
         .order("id", { ascending: false });
 
       if (error) {
@@ -132,7 +124,7 @@ export function useRavitaillementsVehicule() {
       action: "CREATE",
       targetTable: "ravitaillements_vehicules",
       targetId: data.id,
-      description: `Creation d'un ravitaillement pour le vehicule ${payload.vehiculeId}.`,
+      description: `Creation d'un ravitaillement du ${payload.date || "-"} pour le vehicule ${payload.vehiculeId}.`,
       afterData: {
         ...payload,
       },
@@ -148,12 +140,11 @@ export function useRavitaillementsVehicule() {
       .from("ravitaillements_vehicules")
       .update(
         buildRavitaillementPayload({
-          dateSituation: payload.dateSituation,
-          dateRavitaillement: payload.dateRavitaillement,
+          date: payload.date,
           vehiculeId: payload.vehiculeId,
-          montantPrevu: payload.montantPrevu,
           montantRavitaille: payload.montantRavitaille,
-          statut: payload.statut,
+          commentaire: payload.commentaire,
+          kilometrage: payload.kilometrage,
           nLiter: payload.nLiter,
         })
       )
@@ -172,41 +163,6 @@ export function useRavitaillementsVehicule() {
       description: `Modification du ravitaillement ${payload.id}.`,
       beforeData: previousRavitaillement,
       afterData: payload,
-    });
-
-    await loadRavitaillements();
-  }
-
-  async function updateRavitaillementVehiculeStatut(
-    id: number,
-    statut: StatutRavitaillementVehicule
-  ) {
-    const previousRavitaillement =
-      ravitaillements.find((item) => item.id === id) || null;
-    const { error } = await supabase
-      .from("ravitaillements_vehicules")
-      .update({ statut })
-      .eq("id", id);
-
-    if (error) {
-      console.error("Erreur mise a jour statut ravitaillement vehicule:", error);
-      throw error;
-    }
-
-    await writeActivityLogSafe({
-      module: "ravitaillements",
-      action: "UPDATE_STATUT",
-      targetTable: "ravitaillements_vehicules",
-      targetId: id,
-      description: `Changement de statut du ravitaillement ${id} vers ${statut}.`,
-      beforeData: previousRavitaillement,
-      afterData: previousRavitaillement
-        ? { ...previousRavitaillement, statut }
-        : { id, statut },
-      metadata: {
-        previousStatut: previousRavitaillement?.statut || null,
-        nextStatut: statut,
-      },
     });
 
     await loadRavitaillements();
@@ -242,7 +198,6 @@ export function useRavitaillementsVehicule() {
     loading,
     addRavitaillementVehicule,
     updateRavitaillementVehicule,
-    updateRavitaillementVehiculeStatut,
     deleteRavitaillementVehicule,
     reload: loadRavitaillements,
   };

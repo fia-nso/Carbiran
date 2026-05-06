@@ -17,22 +17,14 @@ export interface Vehicule {
   zone: string;
 }
 
-export type StatutRavitaillementVehicule =
-  | "EN_ATTEND_SITUATION"
-  | "VALIDE"
-  | "EN_COURS"
-  | "BON_RETOUNREE"
-  | "CASH";
-
 export interface RavitaillementVehicule {
   id: number;
-  dateSituation: string | null;
-  dateRavitaillement: string | null;
+  date: string | null;
   vehiculeId: number;
   vehicule: Vehicule | null;
-  montantPrevu: number;
   montantRavitaille: number;
-  statut: StatutRavitaillementVehicule;
+  commentaire: string;
+  kilometrage: number;
   nLiter: number;
   createdAt?: string;
   updatedAt?: string;

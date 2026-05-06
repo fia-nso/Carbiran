@@ -100,7 +100,8 @@ function getTargetLabel(log: ActivityLog) {
     "vehicule",
     "matricule",
     "email",
-    "statut",
+    "date",
+    "commentaire",
     "id",
   ];
 
@@ -135,10 +136,10 @@ function getSimpleChangeLines(log: ActivityLog) {
     matricule: "Matricule",
     zone: "Zone",
     montantRavitaille: "Montant ravitaille",
-    montantPrevu: "Montant prevu",
     nLiter: "Nombre de litres",
-    dateRavitaillement: "Date ravitaillement",
-    dateSituation: "Date situation",
+    kilometrage: "Kilometrage",
+    commentaire: "Commentaire",
+    date: "Date",
   };
 
   const keys = Object.keys(labels);

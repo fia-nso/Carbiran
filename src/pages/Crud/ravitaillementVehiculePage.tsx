@@ -1,35 +1,28 @@
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
 import { useVehicules } from "@/hooks/useVehicule";
-import type {
-  RavitaillementVehicule,
-  StatutRavitaillementVehicule,
-} from "@/types";
+import type { RavitaillementVehicule } from "@/types";
 
-type DateFilterField = "dateSituation" | "dateRavitaillement";
-type StatutFilter = StatutRavitaillementVehicule | "ALL";
 type RavitaillementDraft = {
-  dateSituation: string | null;
-  dateRavitaillement: string | null;
+  date: string | null;
   vehiculeId: number;
-  montantPrevu: number;
   montantRavitaille: number;
-  statut: StatutRavitaillementVehicule;
+  commentaire: string;
+  kilometrage: number;
   nLiter: number;
 };
 
 interface RavitaillementFormState {
-  dateSituation: string;
-  dateRavitaillement: string;
+  date: string;
   vehiculeId: string;
-  montantPrevu: string;
   montantRavitaille: string;
-  statut: StatutRavitaillementVehicule;
+  commentaire: string;
+  kilometrage: string;
   nLiter: string;
 }
 
@@ -41,48 +34,6 @@ interface PendingConfirmation {
   onConfirm: () => Promise<void>;
 }
 
-const initialFormState: RavitaillementFormState = {
-  dateSituation: "",
-  dateRavitaillement: "",
-  vehiculeId: "",
-  montantPrevu: "",
-  montantRavitaille: "",
-  statut: "EN_ATTEND_SITUATION",
-  nLiter: "",
-};
-
-const statutOptions: Array<{
-  value: StatutRavitaillementVehicule;
-  label: string;
-  tone: string;
-}> = [
-  {
-    value: "EN_ATTEND_SITUATION",
-    label: "En attente situation",
-    tone: "bg-amber-100 text-amber-800 border border-amber-200",
-  },
-  {
-    value: "VALIDE",
-    label: "Valide",
-    tone: "bg-green-100 text-green-800 border border-green-200",
-  },
-  {
-    value: "EN_COURS",
-    label: "En cours",
-    tone: "bg-orange-100 text-orange-800 border border-orange-200",
-  },
-  {
-    value: "BON_RETOUNREE",
-    label: "Bon retournee",
-    tone: "bg-blue-100 text-blue-800 border border-blue-200",
-  },
-  {
-    value: "CASH",
-    label: "Cash",
-    tone: "bg-purple-100 text-purple-800 border border-purple-200",
-  },
-];
-
 interface ActionIconButtonProps {
   label: string;
   onClick: () => void;
@@ -90,6 +41,15 @@ interface ActionIconButtonProps {
   className: string;
   disabled?: boolean;
 }
+
+const initialFormState: RavitaillementFormState = {
+  date: "",
+  vehiculeId: "",
+  montantRavitaille: "",
+  commentaire: "",
+  kilometrage: "",
+  nLiter: "",
+};
 
 function ActionIconButton({
   label,
@@ -114,19 +74,6 @@ function ActionIconButton({
         {label}
       </div>
     </div>
-  );
-}
-
-function LoadingIcon() {
-  return (
-    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-90"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-      />
-    </svg>
   );
 }
 
@@ -165,27 +112,32 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function validateRavitaillementDraft(payload: RavitaillementDraft) {
   const errors: string[] = [];
 
-  if (!payload.dateSituation && !payload.dateRavitaillement) {
-    errors.push("Renseignez au moins une date : date situation ou date ravitaillement.");
+  if (!payload.date) {
+    errors.push("La date est obligatoire.");
   }
 
   if (!payload.vehiculeId) {
     errors.push("Le vehicule est obligatoire.");
   }
 
-  if (!payload.statut) {
-    errors.push("Le statut est obligatoire.");
-  }
-
-  if (Number.isNaN(payload.montantPrevu) || payload.montantPrevu < 0) {
-    errors.push("Le montant prevu doit etre un nombre positif ou nul.");
-  }
-
   if (Number.isNaN(payload.montantRavitaille) || payload.montantRavitaille < 0) {
     errors.push("Le montant ravitaille doit etre un nombre positif ou nul.");
+  }
+
+  if (Number.isNaN(payload.kilometrage) || payload.kilometrage < 0) {
+    errors.push("Le kilometrage doit etre un nombre positif ou nul.");
   }
 
   if (Number.isNaN(payload.nLiter) || payload.nLiter < 0) {
@@ -195,21 +147,6 @@ function validateRavitaillementDraft(payload: RavitaillementDraft) {
   return errors;
 }
 
-function getStatusForDateSituation(
-  dateSituation: string | null,
-  statut: StatutRavitaillementVehicule
-) {
-  if (!dateSituation) {
-    return "EN_ATTEND_SITUATION";
-  }
-
-  if (statut === "EN_ATTEND_SITUATION") {
-    return "EN_COURS";
-  }
-
-  return statut;
-}
-
 export default function RavitaillementVehiculePage() {
   const { user } = useAuthContext();
   const {
@@ -217,21 +154,18 @@ export default function RavitaillementVehiculePage() {
     loading,
     addRavitaillementVehicule,
     updateRavitaillementVehicule,
-    updateRavitaillementVehiculeStatut,
     deleteRavitaillementVehicule,
   } = useRavitaillementsVehicule();
   const { allVehicules, loading: vehiculesLoading } = useVehicules();
 
   const [search, setSearch] = useState("");
-  const [dateFilterField, setDateFilterField] = useState<DateFilterField>("dateSituation");
   const [dateFilterFrom, setDateFilterFrom] = useState("");
   const [dateFilterTo, setDateFilterTo] = useState("");
-  const [statutFilter, setStatutFilter] = useState<StatutFilter>("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRavitaillement, setEditingRavitaillement] = useState<RavitaillementVehicule | null>(null);
   const [form, setForm] = useState<RavitaillementFormState>(initialFormState);
-  const [quickActionKey, setQuickActionKey] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const isViewer = user?.role === "viewer";
 
   const displayedRavitaillements = useMemo(() => {
@@ -245,45 +179,43 @@ export default function RavitaillementVehiculePage() {
           item.vehicule?.matricule || "",
           item.vehicule?.chauffeurResponsable || "",
           item.vehicule?.zone || "",
-          item.statut,
+          item.commentaire || "",
+          normalizeDateValue(item.date),
         ].some((value) => value.toLowerCase().includes(normalizedSearch));
 
-      const itemDate = normalizeDateValue(item[dateFilterField]);
+      const itemDate = normalizeDateValue(item.date);
       const matchesDateFrom = !dateFilterFrom || (!!itemDate && itemDate >= dateFilterFrom);
       const matchesDateTo = !dateFilterTo || (!!itemDate && itemDate <= dateFilterTo);
-      const matchesDate = matchesDateFrom && matchesDateTo;
 
-      const matchesStatut =
-        statutFilter === "ALL" || item.statut === statutFilter;
-
-      return matchesSearch && matchesDate && matchesStatut;
+      return matchesSearch && matchesDateFrom && matchesDateTo;
     });
-  }, [dateFilterField, dateFilterFrom, dateFilterTo, ravitaillements, search, statutFilter]);
+  }, [dateFilterFrom, dateFilterTo, ravitaillements, search]);
 
   const stats = {
     total: displayedRavitaillements.length,
     litres: displayedRavitaillements.reduce((sum, item) => sum + item.nLiter, 0),
-    montantPrevu: displayedRavitaillements.reduce((sum, item) => sum + item.montantPrevu, 0),
     montantRavitaille: displayedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0),
   };
-  const isDateSituationMissing = form.dateSituation.trim() === "";
+  const displayedIds = useMemo(
+    () => displayedRavitaillements.map((item) => item.id),
+    [displayedRavitaillements]
+  );
+  const selectedRavitaillements = useMemo(
+    () => displayedRavitaillements.filter((item) => selectedIds.includes(item.id)),
+    [displayedRavitaillements, selectedIds]
+  );
+  const isAllDisplayedSelected =
+    displayedIds.length > 0 && displayedIds.every((id) => selectedIds.includes(id));
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => displayedIds.includes(id)));
+  }, [displayedIds]);
 
   function updateForm<K extends keyof RavitaillementFormState>(
     key: K,
     value: RavitaillementFormState[K]
   ) {
-    setForm((prev) => {
-      const nextForm = { ...prev, [key]: value };
-
-      if (key === "dateSituation") {
-        nextForm.statut = getStatusForDateSituation(
-          String(value).trim() || null,
-          prev.statut
-        );
-      }
-
-      return nextForm;
-    });
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   function openAddModal() {
@@ -293,16 +225,13 @@ export default function RavitaillementVehiculePage() {
   }
 
   function openEditModal(item: RavitaillementVehicule) {
-    const normalizedDateSituation = normalizeDateValue(item.dateSituation);
-
     setEditingRavitaillement(item);
     setForm({
-      dateSituation: normalizedDateSituation,
-      dateRavitaillement: normalizeDateValue(item.dateRavitaillement),
+      date: normalizeDateValue(item.date),
       vehiculeId: String(item.vehiculeId),
-      montantPrevu: String(item.montantPrevu),
       montantRavitaille: String(item.montantRavitaille),
-      statut: getStatusForDateSituation(normalizedDateSituation || null, item.statut),
+      commentaire: item.commentaire,
+      kilometrage: String(item.kilometrage),
       nLiter: String(item.nLiter),
     });
     setIsModalOpen(true);
@@ -312,19 +241,217 @@ export default function RavitaillementVehiculePage() {
     setPendingConfirmation(payload);
   }
 
+  function toggleSelection(id: number) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSelectAllDisplayed() {
+    setSelectedIds((prev) => {
+      if (isAllDisplayedSelected) {
+        return prev.filter((id) => !displayedIds.includes(id));
+      }
+
+      const next = new Set(prev);
+      for (const id of displayedIds) {
+        next.add(id);
+      }
+      return Array.from(next);
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  function handlePrintSelection() {
+    if (selectedRavitaillements.length === 0) {
+      alert("Selectionnez au moins un ravitaillement a imprimer.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
+
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenetre d'impression.");
+      return;
+    }
+
+    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const rowsHtml = selectedRavitaillements
+      .map(
+        (item, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${formatDateForDisplay(item.date)}</td>
+            <td>${escapeHtml(item.vehicule?.vehicule || "-")}</td>
+            <td>${escapeHtml(item.vehicule?.matricule || "-")}</td>
+            <td>${escapeHtml(item.vehicule?.chauffeurResponsable || "-")}</td>
+            <td>${escapeHtml(item.vehicule?.zone || "-")}</td>
+            <td>${formatNumber(item.montantRavitaille)}</td>
+            <td>${formatNumber(item.nLiter)}</td>
+            <td>${formatNumber(item.kilometrage)}</td>
+            <td>${escapeHtml(item.commentaire || "-")}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const totalMontant = selectedRavitaillements.reduce(
+      (sum, item) => sum + item.montantRavitaille,
+      0
+    );
+    const totalLitres = selectedRavitaillements.reduce((sum, item) => sum + item.nLiter, 0);
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Impression ravitaillements</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 24px;
+              color: #1f2937;
+            }
+            .print-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 24px;
+              border-bottom: 3px solid #166534;
+              padding-bottom: 16px;
+              margin-bottom: 18px;
+            }
+            .print-header img {
+              width: 92px;
+              height: 92px;
+              object-fit: contain;
+              flex-shrink: 0;
+            }
+            .print-header-text {
+              flex: 1;
+              text-align: center;
+            }
+            .print-header-text h2,
+            .print-header-text h3,
+            .print-header-text h4 {
+              margin: 0;
+              font-weight: 700;
+              color: #111827;
+            }
+            .print-header-text h2 {
+              font-size: 22px;
+              letter-spacing: 0.04em;
+            }
+            .print-header-text h3 {
+              font-size: 18px;
+              margin-top: 6px;
+            }
+            .print-header-text h4 {
+              font-size: 17px;
+              margin-top: 6px;
+            }
+            h1 {
+              margin: 0 0 8px;
+              font-size: 22px;
+            }
+            p {
+              margin: 0 0 16px;
+              color: #4b5563;
+            }
+            .summary {
+              margin-bottom: 20px;
+              padding: 12px 16px;
+              background: #ecfdf5;
+              border: 1px solid #a7f3d0;
+              border-radius: 12px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              border: 1px solid #d1d5db;
+              padding: 10px 8px;
+              text-align: left;
+              vertical-align: top;
+              font-size: 12px;
+            }
+            th {
+              background: #166534;
+              color: white;
+            }
+            tbody tr:nth-child(even) {
+              background: #f9fafb;
+            }
+            @media print {
+              body {
+                margin: 12px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="print-header-text">
+              <h2>RIMATEL</h2>
+              <h3>Direction Générale</h3>
+              <h4>Cellule de Contrôle, Suivi &amp; Évaluation</h4>
+            </div>
+            <div style="width: 92px;"></div>
+          </div>
+          <h1>Ravitaillements selectionnes</h1>
+          <p>Impression preparee a partir des resultats filtres.</p>
+          <div class="summary">
+            <strong>Nombre d'elements :</strong> ${selectedRavitaillements.length}
+            <br />
+            <strong>Montant total :</strong> ${formatNumber(totalMontant)}
+            <br />
+            <strong>Litres totaux :</strong> ${formatNumber(totalLitres)}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Vehicule</th>
+                <th>Matricule</th>
+                <th>Chauffeur</th>
+                <th>Zone</th>
+                <th>Montant</th>
+                <th>Litres</th>
+                <th>Kilometrage</th>
+                <th>Commentaire</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalizedDateSituation = form.dateSituation.trim() || null;
-    const normalizedDateRavitaillement = form.dateRavitaillement.trim() || null;
+    const montantRavitaille =
+      form.montantRavitaille.trim() === "" ? Number.NaN : Number(form.montantRavitaille);
+    const kilometrage = form.kilometrage.trim() === "" ? 0 : Number(form.kilometrage);
+    const nLiter = form.nLiter.trim() === "" ? 0 : Number(form.nLiter);
 
     const payload: RavitaillementDraft = {
-      dateSituation: normalizedDateSituation,
-      dateRavitaillement: normalizedDateRavitaillement,
+      date: form.date.trim() || null,
       vehiculeId: Number(form.vehiculeId),
-      montantPrevu: Number(form.montantPrevu),
-      montantRavitaille: Number(form.montantRavitaille),
-      statut: getStatusForDateSituation(normalizedDateSituation, form.statut),
-      nLiter: Number(form.nLiter),
+      montantRavitaille,
+      commentaire: form.commentaire.trim(),
+      kilometrage,
+      nLiter,
     };
 
     const validationErrors = validateRavitaillementDraft(payload);
@@ -339,7 +466,7 @@ export default function RavitaillementVehiculePage() {
         requestConfirmation({
           title: "Confirmer la modification",
           description: `Vous allez modifier le ravitaillement du ${formatDateForDisplay(
-            payload.dateRavitaillement || payload.dateSituation
+            payload.date
           )} pour ${currentItem.vehicule?.vehicule || "ce vehicule"}.`,
           confirmLabel: "Confirmer la modification",
           tone: "warning",
@@ -365,55 +492,11 @@ export default function RavitaillementVehiculePage() {
     }
   }
 
-  async function handleQuickStatusChange(
-    item: RavitaillementVehicule,
-    statut: StatutRavitaillementVehicule
-  ) {
-    const normalizedDateSituation = normalizeDateValue(item.dateSituation) || null;
-
-    if (!normalizedDateSituation && statut !== "EN_ATTEND_SITUATION") {
-      alert("Sans date situation, le statut doit rester sur En attente situation.");
-      return;
-    }
-
-    const payload: RavitaillementDraft = {
-      dateSituation: normalizedDateSituation,
-      dateRavitaillement: normalizeDateValue(item.dateRavitaillement) || null,
-      vehiculeId: item.vehiculeId,
-      montantPrevu: item.montantPrevu,
-      montantRavitaille: item.montantRavitaille,
-      statut,
-      nLiter: item.nLiter,
-    };
-
-    const validationErrors = validateRavitaillementDraft(payload);
-    if (validationErrors.length > 0) {
-      alert(validationErrors.join("\n"));
-      return;
-    }
-
-    const actionKey = `${item.id}-${statut}`;
-    requestConfirmation({
-      title: "Confirmer le changement de statut",
-      description: `Vous allez passer le ravitaillement de ${item.vehicule?.vehicule || "ce vehicule"} au statut ${statut}.`,
-      confirmLabel: "Confirmer le statut",
-      tone: "warning",
-      onConfirm: async () => {
-        setQuickActionKey(actionKey);
-        try {
-          await updateRavitaillementVehiculeStatut(item.id, statut);
-        } finally {
-          setQuickActionKey(null);
-        }
-      },
-    });
-  }
-
   async function handleDelete(item: RavitaillementVehicule) {
     requestConfirmation({
       title: "Confirmer la suppression",
       description: `Vous allez supprimer le ravitaillement du ${formatDateForDisplay(
-        item.dateRavitaillement || item.dateSituation
+        item.date
       )} pour ${item.vehicule?.vehicule || "ce vehicule"}. Cette action est sensible.`,
       confirmLabel: "Confirmer la suppression",
       tone: "danger",
@@ -428,12 +511,6 @@ export default function RavitaillementVehiculePage() {
     });
   }
 
-  function getStatutMeta(statut: StatutRavitaillementVehicule) {
-    return (
-      statutOptions.find((option) => option.value === statut) || statutOptions[0]
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -446,7 +523,7 @@ export default function RavitaillementVehiculePage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Ravitaillements vehicules</h1>
                 <p className="text-gray-600 mt-1">
-                  Suivez les montants prevus, les montants reels et les statuts des ravitaillements.
+                  Suivez les ravitaillements, les montants, le kilometrage et les litres par vehicule.
                 </p>
               </div>
             </div>
@@ -464,7 +541,7 @@ export default function RavitaillementVehiculePage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-8">
             <div className="bg-green-50 border border-green-200 rounded-2xl p-5">
               <p className="text-sm text-green-700 font-medium">Ravitaillements affiches</p>
               <p className="text-3xl font-bold text-green-900 mt-2">{stats.total}</p>
@@ -472,10 +549,6 @@ export default function RavitaillementVehiculePage() {
             <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5">
               <p className="text-sm text-teal-700 font-medium">Litres ravitailles</p>
               <p className="text-3xl font-bold text-teal-900 mt-2">{formatNumber(stats.litres)}</p>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-              <p className="text-sm text-amber-700 font-medium">Montant prevu</p>
-              <p className="text-3xl font-bold text-amber-900 mt-2">{formatNumber(stats.montantPrevu)}</p>
             </div>
             <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5">
               <p className="text-sm text-orange-700 font-medium">Montant ravitaille</p>
@@ -485,7 +558,7 @@ export default function RavitaillementVehiculePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-2 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -496,19 +569,10 @@ export default function RavitaillementVehiculePage() {
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Rechercher par vehicule, matricule, chauffeur ou zone..."
+                placeholder="Rechercher par vehicule, matricule, chauffeur, zone ou commentaire..."
                 className="pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 w-full bg-white shadow-sm"
               />
             </div>
-
-            <select
-              value={dateFilterField}
-              onChange={(event) => setDateFilterField(event.target.value as DateFilterField)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
-            >
-              <option value="dateSituation">Date situation</option>
-              <option value="dateRavitaillement">Date ravitaillement</option>
-            </select>
 
             <input
               type="date"
@@ -529,44 +593,42 @@ export default function RavitaillementVehiculePage() {
             Filtrez par intervalle de dates : de la premiere date jusqu'a la deuxieme.
           </p>
 
-          <div className="flex flex-wrap gap-3 mt-4">
-            <button
-              onClick={() => setStatutFilter("ALL")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                statutFilter === "ALL"
-                  ? "bg-gradient-to-r from-green-500 to-teal-600 text-white shadow-lg"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Tous
-            </button>
-            {statutOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setStatutFilter(option.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  statutFilter === option.value
-                    ? "bg-gradient-to-r from-green-500 to-teal-600 text-white shadow-lg"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {!isViewer && (
-            <p className="mt-4 text-sm text-gray-500">
-              Actions rapides disponibles dans le tableau : En cours, Valider, Bon retournee et Cash.
+          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-sm text-gray-600">
+              {selectedRavitaillements.length} element(s) selectionne(s) pour impression.
             </p>
-          )}
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={toggleSelectAllDisplayed}
+                disabled={displayedRavitaillements.length === 0}
+                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                {isAllDisplayedSelected ? "Tout deselectionner" : "Selectionner les resultats"}
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                disabled={selectedRavitaillements.length === 0}
+                className="px-4 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                Vider la selection
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintSelection}
+                disabled={selectedRavitaillements.length === 0}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-teal-600 text-white hover:from-green-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+              >
+                Imprimer la selection
+              </button>
+            </div>
+          </div>
         </div>
 
-        {!vehiculesLoading && allVehicules.length === 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-900">
-            {isViewer
-              ? "Aucun vehicule n'est disponible pour l'instant."
-              : "Aucun vehicule n'est disponible pour l'instant. Creez d'abord un vehicule avant d'ajouter un ravitaillement."}
+        {!isViewer && allVehicules.length === 0 && !vehiculesLoading && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-800">
+            Aucun vehicule n'est disponible pour l'instant. Creez d'abord un vehicule avant d'ajouter un ravitaillement.
           </div>
         )}
 
@@ -575,8 +637,11 @@ export default function RavitaillementVehiculePage() {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-green-50 to-teal-100 border-b border-green-200">
                 <tr>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
+                    Select.
+                  </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
-                    Dates
+                    Date
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Vehicule
@@ -585,13 +650,16 @@ export default function RavitaillementVehiculePage() {
                     Zone
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
-                    Montants
+                    Montant ravitaille
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Litres
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
-                    Statut
+                    Kilometrage
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
+                    Commentaire
                   </th>
                   {!isViewer && (
                     <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
@@ -603,7 +671,7 @@ export default function RavitaillementVehiculePage() {
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 8 : 9} className="px-6 py-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                         <span className="ml-3 text-gray-600">Chargement des ravitaillements...</span>
@@ -612,7 +680,7 @@ export default function RavitaillementVehiculePage() {
                   </tr>
                 ) : displayedRavitaillements.length === 0 ? (
                   <tr>
-                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 8 : 9} className="px-6 py-12 text-center">
                       <div className="text-center">
                         <h3 className="text-lg font-medium text-gray-900">Aucun ravitaillement</h3>
                         <p className="mt-1 text-gray-500">
@@ -624,123 +692,44 @@ export default function RavitaillementVehiculePage() {
                     </td>
                   </tr>
                 ) : (
-                  displayedRavitaillements.map((item) => {
-                    const statutMeta = getStatutMeta(item.statut);
-                    const isRowDateSituationMissing =
-                      normalizeDateValue(item.dateSituation) === "";
-
-                    return (
-                      <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-150">
-                        <td className="px-6 py-4 text-gray-700">
-                          <div className="font-medium">
-                            Sit.: {formatDateForDisplay(item.dateSituation)}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Rav.: {formatDateForDisplay(item.dateRavitaillement)}
-                          </div>
-                        </td>
+                  displayedRavitaillements.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelection(item.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          aria-label={`Selectionner le ravitaillement ${item.id}`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 text-gray-700 font-medium">
+                        {formatDateForDisplay(item.date)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-gray-900">
+                          {item.vehicule?.vehicule || "Vehicule indisponible"}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {item.vehicule?.matricule || "-"}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {item.vehicule?.chauffeurResponsable || "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-700">{item.vehicule?.zone || "-"}</td>
+                      <td className="px-6 py-4 text-gray-700">{formatNumber(item.montantRavitaille)}</td>
+                      <td className="px-6 py-4 text-gray-700">{formatNumber(item.nLiter)}</td>
+                      <td className="px-6 py-4 text-gray-700">{formatNumber(item.kilometrage)}</td>
+                      <td className="px-6 py-4 text-gray-700">
+                        <div className="max-w-xs whitespace-pre-wrap break-words">
+                          {item.commentaire || "-"}
+                        </div>
+                      </td>
+                      {!isViewer && (
                         <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-900">
-                            {item.vehicule?.vehicule || "Vehicule indisponible"}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {item.vehicule?.matricule || "-"}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {item.vehicule?.chauffeurResponsable || "-"}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">{item.vehicule?.zone || "-"}</td>
-                        <td className="px-6 py-4 text-gray-700">
-                          <div>Prevu: {formatNumber(item.montantPrevu)}</div>
-                          <div>Rav.: {formatNumber(item.montantRavitaille)}</div>
-                          <div>Reliquat: {formatNumber(item.montantPrevu - item.montantRavitaille)}</div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">{formatNumber(item.nLiter)}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${statutMeta.tone}`}>
-                            {statutMeta.label}
-                          </span>
-                        </td>
-                        {!isViewer && (
-                          <td className="px-6 py-4">
-                            <div className="flex flex-wrap justify-center gap-2">
-                              <ActionIconButton
-                              label="Passer en cours"
-                              onClick={() => handleQuickStatusChange(item, "EN_COURS")}
-                              disabled={
-                                item.statut === "EN_COURS" ||
-                                quickActionKey !== null ||
-                                isRowDateSituationMissing
-                              }
-                              className="text-orange-700 bg-orange-50 hover:bg-orange-100 border-orange-200"
-                            >
-                              {quickActionKey === `${item.id}-EN_COURS` ? (
-                                <LoadingIcon />
-                              ) : (
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                  <circle cx="12" cy="12" r="9" strokeWidth="2" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 7v5l3 2" />
-                                </svg>
-                              )}
-                              </ActionIconButton>
-                              <ActionIconButton
-                              label="Valider"
-                              onClick={() => handleQuickStatusChange(item, "VALIDE")}
-                              disabled={
-                                item.statut === "VALIDE" ||
-                                quickActionKey !== null ||
-                                isRowDateSituationMissing
-                              }
-                              className="text-green-700 bg-green-50 hover:bg-green-100 border-green-200"
-                            >
-                              {quickActionKey === `${item.id}-VALIDE` ? (
-                                <LoadingIcon />
-                              ) : (
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12l4 4L19 6" />
-                                </svg>
-                              )}
-                              </ActionIconButton>
-                              <ActionIconButton
-                              label="Bon retournee"
-                              onClick={() => handleQuickStatusChange(item, "BON_RETOUNREE")}
-                              disabled={
-                                item.statut === "BON_RETOUNREE" ||
-                                quickActionKey !== null ||
-                                isRowDateSituationMissing
-                              }
-                              className="text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200"
-                            >
-                              {quickActionKey === `${item.id}-BON_RETOUNREE` ? (
-                                <LoadingIcon />
-                              ) : (
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 8H5v4" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12a7 7 0 101.9-4.8" />
-                                </svg>
-                              )}
-                              </ActionIconButton>
-                              <ActionIconButton
-                              label="Passer cash"
-                              onClick={() => handleQuickStatusChange(item, "CASH")}
-                              disabled={
-                                item.statut === "CASH" ||
-                                quickActionKey !== null ||
-                                isRowDateSituationMissing
-                              }
-                              className="text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200"
-                            >
-                              {quickActionKey === `${item.id}-CASH` ? (
-                                <LoadingIcon />
-                              ) : (
-                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                  <rect x="3" y="6" width="18" height="12" rx="2" strokeWidth="2" />
-                                  <circle cx="12" cy="12" r="2.5" strokeWidth="2" />
-                                </svg>
-                              )}
-                              </ActionIconButton>
-                              <ActionIconButton
+                          <div className="flex flex-wrap justify-center gap-2">
+                            <ActionIconButton
                               label="Modifier"
                               onClick={() => openEditModal(item)}
                               className="text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200"
@@ -749,8 +738,8 @@ export default function RavitaillementVehiculePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 20h4l10-10-4-4L4 16v4z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l4 4" />
                               </svg>
-                              </ActionIconButton>
-                              <ActionIconButton
+                            </ActionIconButton>
+                            <ActionIconButton
                               label="Supprimer"
                               onClick={() => handleDelete(item)}
                               className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200"
@@ -760,13 +749,12 @@ export default function RavitaillementVehiculePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7V5h6v2" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7l1 12h6l1-12" />
                               </svg>
-                              </ActionIconButton>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })
+                            </ActionIconButton>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -783,64 +771,32 @@ export default function RavitaillementVehiculePage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="date-situation" className="block text-sm font-medium text-gray-700 mb-2">
-                  Date situation
+                <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
+                  Date
                 </label>
                 <input
-                  id="date-situation"
+                  id="date"
                   type="date"
-                  value={form.dateSituation}
-                  onChange={(event) => updateForm("dateSituation", event.target.value)}
+                  value={form.date}
+                  onChange={(event) => updateForm("date", event.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                 />
               </div>
 
               <div>
-                <label htmlFor="date-ravitaillement" className="block text-sm font-medium text-gray-700 mb-2">
-                  Date ravitaillement
+                <label htmlFor="vehicule-id" className="block text-sm font-medium text-gray-700 mb-2">
+                  Vehicule
                 </label>
-                <input
-                  id="date-ravitaillement"
-                  type="date"
-                  value={form.dateRavitaillement}
-                  onChange={(event) => updateForm("dateRavitaillement", event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                <SearchableVehiculeSelect
+                  vehicules={allVehicules}
+                  value={form.vehiculeId}
+                  onChange={(nextValue) => updateForm("vehiculeId", nextValue)}
+                  disabled={allVehicules.length === 0}
                 />
-                <p className="mt-2 text-sm text-gray-500">
-                  Au moins une des deux dates est obligatoire.
-                </p>
               </div>
             </div>
 
-            <div>
-              <label htmlFor="vehicule-id" className="block text-sm font-medium text-gray-700 mb-2">
-                Vehicule
-              </label>
-              <SearchableVehiculeSelect
-                vehicules={allVehicules}
-                value={form.vehiculeId}
-                onChange={(nextValue) => updateForm("vehiculeId", nextValue)}
-                disabled={allVehicules.length === 0}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="montant-prevu" className="block text-sm font-medium text-gray-700 mb-2">
-                  Montant prevu
-                </label>
-                <input
-                  id="montant-prevu"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.montantPrevu}
-                  onChange={(event) => updateForm("montantPrevu", event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
-                  placeholder="0"
-                />
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="montant-ravitaille" className="block text-sm font-medium text-gray-700 mb-2">
                   Montant ravitaille
@@ -856,9 +812,7 @@ export default function RavitaillementVehiculePage() {
                   placeholder="0"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="n-liter" className="block text-sm font-medium text-gray-700 mb-2">
                   Nombre de litres
@@ -876,35 +830,34 @@ export default function RavitaillementVehiculePage() {
               </div>
 
               <div>
-                <label htmlFor="statut" className="block text-sm font-medium text-gray-700 mb-2">
-                  Statut
+                <label htmlFor="kilometrage" className="block text-sm font-medium text-gray-700 mb-2">
+                  Kilometrage
                 </label>
-                <select
-                  id="statut"
-                  value={form.statut}
-                  onChange={(event) =>
-                    updateForm("statut", event.target.value as StatutRavitaillementVehicule)
-                  }
-                  disabled={isDateSituationMissing}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                >
-                  {statutOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {isDateSituationMissing && (
-                  <p className="mt-2 text-sm text-amber-700">
-                    Sans date situation, le statut est force sur En attente situation.
-                  </p>
-                )}
-                {!isDateSituationMissing && form.statut === "EN_COURS" && (
-                  <p className="mt-2 text-sm text-teal-700">
-                    Avec une date situation, le statut passe automatiquement a En cours.
-                  </p>
-                )}
+                <input
+                  id="kilometrage"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.kilometrage}
+                  onChange={(event) => updateForm("kilometrage", event.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                  placeholder="0"
+                />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="commentaire" className="block text-sm font-medium text-gray-700 mb-2">
+                Commentaire
+              </label>
+              <textarea
+                id="commentaire"
+                value={form.commentaire}
+                onChange={(event) => updateForm("commentaire", event.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 resize-y"
+                placeholder="Ajoutez un commentaire utile si besoin..."
+              />
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
