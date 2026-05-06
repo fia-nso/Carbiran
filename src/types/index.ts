@@ -27,7 +27,7 @@ export type StatutRavitaillementVehicule =
 export interface RavitaillementVehicule {
   id: number;
   dateSituation: string | null;
-  dateRavitaillement: string;
+  dateRavitaillement: string | null;
   vehiculeId: number;
   vehicule: Vehicule | null;
   montantPrevu: number;

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
+import { useAuthContext } from "@/context/AuthProvider";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
 import { useVehicules } from "@/hooks/useVehicule";
 import type {
@@ -14,7 +15,7 @@ type DateFilterField = "dateSituation" | "dateRavitaillement";
 type StatutFilter = StatutRavitaillementVehicule | "ALL";
 type RavitaillementDraft = {
   dateSituation: string | null;
-  dateRavitaillement: string;
+  dateRavitaillement: string | null;
   vehiculeId: number;
   montantPrevu: number;
   montantRavitaille: number;
@@ -167,8 +168,8 @@ function formatNumber(value: number) {
 function validateRavitaillementDraft(payload: RavitaillementDraft) {
   const errors: string[] = [];
 
-  if (!payload.dateRavitaillement) {
-    errors.push("La date ravitaillement est obligatoire.");
+  if (!payload.dateSituation && !payload.dateRavitaillement) {
+    errors.push("Renseignez au moins une date : date situation ou date ravitaillement.");
   }
 
   if (!payload.vehiculeId) {
@@ -210,6 +211,7 @@ function getStatusForDateSituation(
 }
 
 export default function RavitaillementVehiculePage() {
+  const { user } = useAuthContext();
   const {
     ravitaillements,
     loading,
@@ -222,13 +224,15 @@ export default function RavitaillementVehiculePage() {
 
   const [search, setSearch] = useState("");
   const [dateFilterField, setDateFilterField] = useState<DateFilterField>("dateSituation");
-  const [dateFilterValue, setDateFilterValue] = useState("");
+  const [dateFilterFrom, setDateFilterFrom] = useState("");
+  const [dateFilterTo, setDateFilterTo] = useState("");
   const [statutFilter, setStatutFilter] = useState<StatutFilter>("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRavitaillement, setEditingRavitaillement] = useState<RavitaillementVehicule | null>(null);
   const [form, setForm] = useState<RavitaillementFormState>(initialFormState);
   const [quickActionKey, setQuickActionKey] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const isViewer = user?.role === "viewer";
 
   const displayedRavitaillements = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -244,16 +248,17 @@ export default function RavitaillementVehiculePage() {
           item.statut,
         ].some((value) => value.toLowerCase().includes(normalizedSearch));
 
-      const matchesDate =
-        !dateFilterValue ||
-        normalizeDateValue(item[dateFilterField]) === dateFilterValue;
+      const itemDate = normalizeDateValue(item[dateFilterField]);
+      const matchesDateFrom = !dateFilterFrom || (!!itemDate && itemDate >= dateFilterFrom);
+      const matchesDateTo = !dateFilterTo || (!!itemDate && itemDate <= dateFilterTo);
+      const matchesDate = matchesDateFrom && matchesDateTo;
 
       const matchesStatut =
         statutFilter === "ALL" || item.statut === statutFilter;
 
       return matchesSearch && matchesDate && matchesStatut;
     });
-  }, [dateFilterField, dateFilterValue, ravitaillements, search, statutFilter]);
+  }, [dateFilterField, dateFilterFrom, dateFilterTo, ravitaillements, search, statutFilter]);
 
   const stats = {
     total: displayedRavitaillements.length,
@@ -310,10 +315,11 @@ export default function RavitaillementVehiculePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedDateSituation = form.dateSituation.trim() || null;
+    const normalizedDateRavitaillement = form.dateRavitaillement.trim() || null;
 
     const payload: RavitaillementDraft = {
       dateSituation: normalizedDateSituation,
-      dateRavitaillement: form.dateRavitaillement.trim(),
+      dateRavitaillement: normalizedDateRavitaillement,
       vehiculeId: Number(form.vehiculeId),
       montantPrevu: Number(form.montantPrevu),
       montantRavitaille: Number(form.montantRavitaille),
@@ -333,7 +339,7 @@ export default function RavitaillementVehiculePage() {
         requestConfirmation({
           title: "Confirmer la modification",
           description: `Vous allez modifier le ravitaillement du ${formatDateForDisplay(
-            payload.dateRavitaillement
+            payload.dateRavitaillement || payload.dateSituation
           )} pour ${currentItem.vehicule?.vehicule || "ce vehicule"}.`,
           confirmLabel: "Confirmer la modification",
           tone: "warning",
@@ -372,7 +378,7 @@ export default function RavitaillementVehiculePage() {
 
     const payload: RavitaillementDraft = {
       dateSituation: normalizedDateSituation,
-      dateRavitaillement: normalizeDateValue(item.dateRavitaillement),
+      dateRavitaillement: normalizeDateValue(item.dateRavitaillement) || null,
       vehiculeId: item.vehiculeId,
       montantPrevu: item.montantPrevu,
       montantRavitaille: item.montantRavitaille,
@@ -407,7 +413,7 @@ export default function RavitaillementVehiculePage() {
     requestConfirmation({
       title: "Confirmer la suppression",
       description: `Vous allez supprimer le ravitaillement du ${formatDateForDisplay(
-        item.dateRavitaillement
+        item.dateRavitaillement || item.dateSituation
       )} pour ${item.vehicule?.vehicule || "ce vehicule"}. Cette action est sensible.`,
       confirmLabel: "Confirmer la suppression",
       tone: "danger",
@@ -445,15 +451,17 @@ export default function RavitaillementVehiculePage() {
               </div>
             </div>
 
-            <button
-              onClick={openAddModal}
-              className="bg-gradient-to-r from-green-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Ajouter un ravitaillement
-            </button>
+            {!isViewer && (
+              <button
+                onClick={openAddModal}
+                className="bg-gradient-to-r from-green-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Ajouter un ravitaillement
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
@@ -477,7 +485,7 @@ export default function RavitaillementVehiculePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div className="lg:col-span-2 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -504,11 +512,22 @@ export default function RavitaillementVehiculePage() {
 
             <input
               type="date"
-              value={dateFilterValue}
-              onChange={(event) => setDateFilterValue(event.target.value)}
+              value={dateFilterFrom}
+              onChange={(event) => setDateFilterFrom(event.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+            />
+
+            <input
+              type="date"
+              value={dateFilterTo}
+              onChange={(event) => setDateFilterTo(event.target.value)}
               className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
             />
           </div>
+
+          <p className="mt-4 text-sm text-gray-500">
+            Filtrez par intervalle de dates : de la premiere date jusqu'a la deuxieme.
+          </p>
 
           <div className="flex flex-wrap gap-3 mt-4">
             <button
@@ -536,14 +555,18 @@ export default function RavitaillementVehiculePage() {
             ))}
           </div>
 
-          <p className="mt-4 text-sm text-gray-500">
-            Actions rapides disponibles dans le tableau : En cours, Valider, Bon retournee et Cash.
-          </p>
+          {!isViewer && (
+            <p className="mt-4 text-sm text-gray-500">
+              Actions rapides disponibles dans le tableau : En cours, Valider, Bon retournee et Cash.
+            </p>
+          )}
         </div>
 
         {!vehiculesLoading && allVehicules.length === 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-900">
-            Aucun vehicule n'est disponible pour l'instant. Creez d'abord un vehicule avant d'ajouter un ravitaillement.
+            {isViewer
+              ? "Aucun vehicule n'est disponible pour l'instant."
+              : "Aucun vehicule n'est disponible pour l'instant. Creez d'abord un vehicule avant d'ajouter un ravitaillement."}
           </div>
         )}
 
@@ -570,15 +593,17 @@ export default function RavitaillementVehiculePage() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Statut
                   </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  {!isViewer && (
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                         <span className="ml-3 text-gray-600">Chargement des ravitaillements...</span>
@@ -587,11 +612,13 @@ export default function RavitaillementVehiculePage() {
                   </tr>
                 ) : displayedRavitaillements.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
                       <div className="text-center">
                         <h3 className="text-lg font-medium text-gray-900">Aucun ravitaillement</h3>
                         <p className="mt-1 text-gray-500">
-                          Ajoutez un ravitaillement ou ajustez vos filtres pour afficher des resultats.
+                          {isViewer
+                            ? "Ajustez vos filtres pour afficher des resultats."
+                            : "Ajoutez un ravitaillement ou ajustez vos filtres pour afficher des resultats."}
                         </p>
                       </div>
                     </td>
@@ -634,9 +661,10 @@ export default function RavitaillementVehiculePage() {
                             {statutMeta.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-wrap justify-center gap-2">
-                            <ActionIconButton
+                        {!isViewer && (
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap justify-center gap-2">
+                              <ActionIconButton
                               label="Passer en cours"
                               onClick={() => handleQuickStatusChange(item, "EN_COURS")}
                               disabled={
@@ -654,8 +682,8 @@ export default function RavitaillementVehiculePage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 7v5l3 2" />
                                 </svg>
                               )}
-                            </ActionIconButton>
-                            <ActionIconButton
+                              </ActionIconButton>
+                              <ActionIconButton
                               label="Valider"
                               onClick={() => handleQuickStatusChange(item, "VALIDE")}
                               disabled={
@@ -672,8 +700,8 @@ export default function RavitaillementVehiculePage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12l4 4L19 6" />
                                 </svg>
                               )}
-                            </ActionIconButton>
-                            <ActionIconButton
+                              </ActionIconButton>
+                              <ActionIconButton
                               label="Bon retournee"
                               onClick={() => handleQuickStatusChange(item, "BON_RETOUNREE")}
                               disabled={
@@ -691,8 +719,8 @@ export default function RavitaillementVehiculePage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12a7 7 0 101.9-4.8" />
                                 </svg>
                               )}
-                            </ActionIconButton>
-                            <ActionIconButton
+                              </ActionIconButton>
+                              <ActionIconButton
                               label="Passer cash"
                               onClick={() => handleQuickStatusChange(item, "CASH")}
                               disabled={
@@ -710,8 +738,8 @@ export default function RavitaillementVehiculePage() {
                                   <circle cx="12" cy="12" r="2.5" strokeWidth="2" />
                                 </svg>
                               )}
-                            </ActionIconButton>
-                            <ActionIconButton
+                              </ActionIconButton>
+                              <ActionIconButton
                               label="Modifier"
                               onClick={() => openEditModal(item)}
                               className="text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200"
@@ -720,8 +748,8 @@ export default function RavitaillementVehiculePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 20h4l10-10-4-4L4 16v4z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l4 4" />
                               </svg>
-                            </ActionIconButton>
-                            <ActionIconButton
+                              </ActionIconButton>
+                              <ActionIconButton
                               label="Supprimer"
                               onClick={() => handleDelete(item)}
                               className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200"
@@ -731,9 +759,10 @@ export default function RavitaillementVehiculePage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7V5h6v2" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7l1 12h6l1-12" />
                               </svg>
-                            </ActionIconButton>
-                          </div>
-                        </td>
+                              </ActionIconButton>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -746,7 +775,7 @@ export default function RavitaillementVehiculePage() {
         <div className="w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-green-600 rounded-full opacity-80"></div>
 
         <Modal
-          isOpen={isModalOpen}
+          isOpen={!isViewer && isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={editingRavitaillement ? "Modifier le ravitaillement" : "Nouveau ravitaillement"}
         >
@@ -776,6 +805,9 @@ export default function RavitaillementVehiculePage() {
                   onChange={(event) => updateForm("dateRavitaillement", event.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                 />
+                <p className="mt-2 text-sm text-gray-500">
+                  Au moins une des deux dates est obligatoire.
+                </p>
               </div>
             </div>
 
@@ -893,7 +925,7 @@ export default function RavitaillementVehiculePage() {
         </Modal>
 
         <ConfirmationCodeModal
-          isOpen={pendingConfirmation !== null}
+          isOpen={!isViewer && pendingConfirmation !== null}
           onClose={() => setPendingConfirmation(null)}
           onConfirm={async () => {
             if (pendingConfirmation) {

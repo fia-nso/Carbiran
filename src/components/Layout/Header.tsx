@@ -30,6 +30,12 @@ export default function Header() {
 
           <div className="flex items-center space-x-3">
             <nav className="flex space-x-2">
+              <Link
+                to="/dashboard"
+                className="bg-white/15 px-4 py-2 rounded-lg hover:bg-white/25 transition-all duration-200 hover:shadow-lg border border-white/10 hover:border-white/20 font-medium text-white/90 hover:text-white"
+              >
+                Dashboard
+              </Link>
               {user?.role === "Admin" && (
                 <>
                   <Link

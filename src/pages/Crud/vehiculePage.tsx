@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useAuthContext } from "@/context/AuthProvider";
 import { useVehicules } from "@/hooks/useVehicule";
 import type { Vehicule } from "@/types";
 
@@ -21,6 +22,7 @@ const initialFormState: VehiculeFormState = {
 };
 
 export default function VehiculePage() {
+  const { user } = useAuthContext();
   const {
     vehicules,
     loading,
@@ -34,6 +36,7 @@ export default function VehiculePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null);
   const [form, setForm] = useState<VehiculeFormState>(initialFormState);
+  const isViewer = user?.role === "viewer";
 
   const stats = {
     total: vehicules.length,
@@ -152,15 +155,17 @@ export default function VehiculePage() {
                 />
               </div>
 
-              <button
-                onClick={openAddModal}
-                className="bg-gradient-to-r from-green-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Ajouter un vehicule
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={openAddModal}
+                  className="bg-gradient-to-r from-green-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Ajouter un vehicule
+                </button>
+              )}
             </div>
           </div>
 
@@ -200,15 +205,17 @@ export default function VehiculePage() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Zone
                   </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  {!isViewer && (
+                    <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 5 : 6} className="px-6 py-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                         <span className="ml-3 text-gray-600">Chargement des vehicules...</span>
@@ -217,18 +224,22 @@ export default function VehiculePage() {
                   </tr>
                 ) : vehicules.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 5 : 6} className="px-6 py-12 text-center">
                       <div className="text-center">
                         <h3 className="text-lg font-medium text-gray-900">Aucun vehicule</h3>
                         <p className="mt-1 text-gray-500">
-                          Commencez par ajouter votre premier vehicule.
+                          {isViewer
+                            ? "Aucun vehicule disponible pour le moment."
+                            : "Commencez par ajouter votre premier vehicule."}
                         </p>
-                        <button
-                          onClick={openAddModal}
-                          className="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700"
-                        >
-                          Ajouter un vehicule
-                        </button>
+                        {!isViewer && (
+                          <button
+                            onClick={openAddModal}
+                            className="mt-4 inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700"
+                          >
+                            Ajouter un vehicule
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -246,22 +257,24 @@ export default function VehiculePage() {
                           {item.zone}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-center gap-2">
-                          <button
-                            onClick={() => openEditModal(item)}
-                            className="px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all duration-200"
-                          >
-                            Modifier
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item)}
-                            className="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all duration-200"
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </td>
+                      {!isViewer && (
+                        <td className="px-6 py-4">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() => openEditModal(item)}
+                              className="px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all duration-200"
+                            >
+                              Modifier
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item)}
+                              className="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all duration-200"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -273,7 +286,7 @@ export default function VehiculePage() {
         <div className="w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-green-600 rounded-full opacity-80"></div>
 
         <Modal
-          isOpen={isModalOpen}
+          isOpen={!isViewer && isModalOpen}
           onClose={() => setIsModalOpen(false)}
           title={editingVehicule ? "Modifier le vehicule" : "Nouveau vehicule"}
         >

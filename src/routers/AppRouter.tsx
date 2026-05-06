@@ -12,6 +12,7 @@ import VehiculePage from "@/pages/Crud/vehiculePage";
 import RavitaillementVehiculePage from "@/pages/Crud/ravitaillementVehiculePage";
 import UsersPage from "@/pages/Admin/usersPage";
 import ActivityLogsPage from "@/pages/Admin/activityLogsPage";
+import DashboardPage from "@/pages/Dashboard/dashboardPage";
  
 
 const AppRouter: React.FC = () => {
@@ -28,7 +29,8 @@ const AppRouter: React.FC = () => {
             <Route element={<ProtectedRoute />}>
               {/* Layout wraps all authenticated pages */}
               <Route element={<RootLayout />}>
-                <Route index element={<Navigate to="/ravitaillements" replace />} />
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
                 <Route path="/vehicules" element={<VehiculePage />} />
                 <Route path="/chpass" element={<ChangePasswordPage />} />
@@ -36,7 +38,7 @@ const AppRouter: React.FC = () => {
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/logs" element={<ActivityLogsPage />} />
                 </Route>
-                <Route path="*" element={<Navigate to="/ravitaillements" replace />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>
 

@@ -19,7 +19,7 @@ interface VehiculeRow {
 interface RavitaillementVehiculeRow {
   id: number;
   date_situation: string | null;
-  date_ravitaillement: string;
+  date_ravitaillement: string | null;
   vehicule_id: number;
   montant_prevu: number | string;
   montant_ravitaille: number | string;
@@ -32,7 +32,7 @@ interface RavitaillementVehiculeRow {
 
 interface RavitaillementVehiculePayload {
   dateSituation: string | null;
-  dateRavitaillement: string;
+  dateRavitaillement: string | null;
   vehiculeId: number;
   montantPrevu: number;
   montantRavitaille: number;
