@@ -302,8 +302,6 @@ export default function RavitaillementVehiculePage() {
       (sum, item) => sum + item.montantRavitaille,
       0
     );
-    const totalLitres = selectedRavitaillements.reduce((sum, item) => sum + item.nLiter, 0);
-
     printWindow.document.write(`
       <!doctype html>
       <html lang="fr">
