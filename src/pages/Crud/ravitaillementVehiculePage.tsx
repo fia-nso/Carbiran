@@ -388,6 +388,10 @@ export default function RavitaillementVehiculePage() {
               background: #f9fafb;
             }
             @media print {
+              @page {
+                margin: 0;
+                size: A4;
+              }
               body {
                 margin: 12px;
               }
