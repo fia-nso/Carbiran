@@ -182,10 +182,6 @@ export default function DashboardPage() {
               <p className="text-sm text-teal-700 font-medium">Litres</p>
               <p className="text-3xl font-bold text-teal-900 mt-2">{formatMetric(totals.litres)}</p>
             </div>
-            <div className="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
-              <p className="text-sm text-cyan-700 font-medium">Kilometrage</p>
-              <p className="text-3xl font-bold text-cyan-900 mt-2">{formatMetric(totals.kilometrage)}</p>
-            </div>
           </div>
         </div>
 

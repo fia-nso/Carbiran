@@ -409,7 +409,6 @@ export default function RavitaillementVehiculePage() {
             <div style="width: 92px;"></div>
           </div>
           <h1>Ravitaillements selectionnes</h1>
-          <p>Impression preparee a partir des resultats filtres.</p>
           <div class="summary">
             <strong>Nombre d'elements :</strong> ${selectedRavitaillements.length}
             <br />
