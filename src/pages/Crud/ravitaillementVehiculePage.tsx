@@ -413,8 +413,6 @@ export default function RavitaillementVehiculePage() {
             <strong>Nombre d'elements :</strong> ${selectedRavitaillements.length}
             <br />
             <strong>Montant total :</strong> ${formatNumber(totalMontant)}
-            <br />
-            <strong>Litres totaux :</strong> ${formatNumber(totalLitres)}
           </div>
           <table>
             <thead>
