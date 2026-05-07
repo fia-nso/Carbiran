@@ -488,15 +488,21 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=1400,height=900");
+    const zones = [...new Set(selectedRavitaillements.map((item) => item.vehicule?.zone).filter(Boolean))];
+    if (zones.length > 1) {
+      alert("Veuillez sélectionner des ravitaillements de la même zone.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=900,height=1200");
     if (!printWindow) {
       alert("Impossible d'ouvrir la fenetre d'impression.");
       return;
     }
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
-    const zones = [...new Set(selectedRavitaillements.map((item) => item.vehicule?.zone).filter(Boolean))];
-    const departement = zones.length > 0 ? zones.join(", ") : "—";
+    const zone = zones[0] ?? "—";
+    const isCdpe = zone.toUpperCase().includes("CDPE");
     const today = new Date().toLocaleDateString("fr-FR");
     const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
 
@@ -504,37 +510,33 @@ export default function RavitaillementVehiculePage() {
       .map(
         (item, index) => `
           <tr>
-            <td>${index + 1}</td>
+            <td style="text-align:center;">${index + 1}</td>
             <td>${escapeHtml(item.vehicule?.vehicule || "-")}<br/><small>${escapeHtml(item.vehicule?.matricule || "-")}</small></td>
             <td>${formatNumber(item.montantRavitaille)}</td>
             <td>${formatDateForDisplay(item.date)}</td>
-            <td></td>
-            <td></td>
-            <td>${escapeHtml(item.vehicule?.chauffeurResponsable || "-")}</td>
-            <td></td>
-            <td></td>
+            <td>${escapeHtml(item.vehicule?.chauffeurResponsable || "-")}<br/><small>Nom :</small></td>
+            <td>STATION</td>
           </tr>
         `
       )
       .join("");
 
-    const signaturesHtml = [
-      "Chef Département",
-      "Directeur Technique",
-      "Directeur Financière",
-      "Cellule de Contrôle, Suivi &amp; Évaluation",
-      "Directeur Général",
-    ]
-      .map(
-        (label) => `
-          <div class="sig-block">
-            <p class="sig-title">${label}</p>
-            <div class="sig-line"></div>
-            <p class="sig-name"></p>
-          </div>
-        `
-      )
-      .join("");
+    const headerInfoHtml = isCdpe
+      ? `<p><strong>Direction Générale</strong></p>
+         <p>La Cellule de Pilotage de déploiement et des extensions</p>`
+      : `<p><strong>Direction Technique</strong></p>
+         <p>${escapeHtml(zone)}</p>`;
+
+    const signaturesHtml = isCdpe
+      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule de Contrôle, Suivi &amp; Évaluation</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
+      : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule de Contrôle, Suivi &amp; Évaluation</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
 
     printWindow.document.write(`
       <!doctype html>
@@ -544,65 +546,50 @@ export default function RavitaillementVehiculePage() {
           <title>Situation des Dépenses CARBURANT</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; margin: 20px; color: #1f2937; font-size: 12px; }
-            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 3px solid #166534; padding-bottom: 12px; margin-bottom: 14px; }
-            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
-            .doc-header-text { flex: 1; text-align: center; }
-            .doc-header-text h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
-            .doc-header-text h3 { margin: 4px 0 0; font-size: 15px; font-weight: 700; }
-            .doc-header-text h4 { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: #374151; }
-            .doc-date { font-size: 11px; text-align: right; white-space: nowrap; }
-            .doc-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 4px; }
-            .doc-dept { text-align: center; font-size: 13px; color: #374151; margin-bottom: 14px; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; }
+            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+            .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
+            .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
+            .doc-header-info p { margin: 2px 0; font-size: 12px; }
+            .doc-date { font-size: 12px; text-align: right; white-space: nowrap; }
+            .doc-title { text-align: center; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
             table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #9ca3af; padding: 6px 5px; text-align: left; vertical-align: top; font-size: 11px; }
-            th { background: #166534; color: white; font-weight: 700; text-align: center; }
-            td:first-child { text-align: center; }
-            tbody tr:nth-child(even) { background: #f9fafb; }
-            tfoot td { font-weight: 700; background: #ecfdf5; }
-            .signatures { display: flex; gap: 8px; margin-top: 40px; }
-            .sig-block { flex: 1; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 8px; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 28px; text-transform: uppercase; }
-            .sig-line { border-bottom: 1px solid #374151; margin: 0 8px 6px; }
-            .sig-name { font-size: 10px; color: #6b7280; margin: 0; min-height: 14px; }
+            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 10px; }
+            th { background: #1f2937; color: white; font-weight: 700; text-align: center; }
+            tfoot td { font-weight: 700; }
+            .signatures { display: flex; gap: 12px; margin-top: 48px; }
+            .sig-block { flex: 1; text-align: center; }
+            .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 6px; text-transform: uppercase; }
+            .sig-space { height: 60px; }
             @media print {
-              @page { margin: 0; size: A4 landscape; }
-              body { margin: 14px; }
+              @page { margin: 15mm; size: A4 portrait; }
             }
           </style>
         </head>
         <body>
           <div class="doc-header">
             <img src="${logoUrl}" alt="Logo RIMATEL" />
-            <div class="doc-header-text">
-              <h2>RIMATEL</h2>
-              <h3>Direction Générale</h3>
-              <h4>${escapeHtml(departement)}</h4>
-            </div>
-            <div class="doc-date">Fait le : ${today}</div>
+            <div class="doc-header-info">${headerInfoHtml}</div>
+            <div class="doc-date">Date : ${today}</div>
           </div>
-          <div class="doc-title">Situation des Dépenses CARBURANT</div>
-          <div class="doc-dept">Département / Zone : ${escapeHtml(departement)}</div>
+          <div class="doc-title">Situation des dépenses carburant</div>
           <table>
             <thead>
               <tr>
-                <th>Num</th>
+                <th>N°</th>
                 <th>Description</th>
                 <th>Montant</th>
-                <th>Date / Période</th>
-                <th>Justificatif (Facture)</th>
-                <th>Type de Service (Proclamation)</th>
+                <th>Date/Période</th>
                 <th>Responsable</th>
-                <th>N°Tél</th>
                 <th>Bénéficiaire</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
             <tfoot>
               <tr>
-                <td colspan="2" style="text-align:right;">Total</td>
-                <td>${formatNumber(totalMontant)}</td>
-                <td colspan="6"></td>
+                <td colspan="2" style="text-align:right;font-weight:700;">Total</td>
+                <td style="font-weight:700;">${formatNumber(totalMontant)}</td>
+                <td colspan="3"></td>
               </tr>
             </tfoot>
           </table>
@@ -629,72 +616,92 @@ export default function RavitaillementVehiculePage() {
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
 
-    const bonsHtml = selectedRavitaillements
-      .map(
-        (item, index) => `
-          <div class="bon${index < selectedRavitaillements.length - 1 ? " page-break" : ""}">
-            <div class="bon-header">
-              <img src="${logoUrl}" alt="Logo RIMATEL" />
-              <div class="bon-header-text">
-                <h2>RIMATEL</h2>
-                <h3>La Direction Générale</h3>
-                <h4>La Cellule de Pilotage de déploiement et des extensions</h4>
-              </div>
-              <div style="width:80px;"></div>
+    function bonHtml(item: (typeof selectedRavitaillements)[0]) {
+      return `
+        <div class="bon">
+          <div class="bon-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="bon-header-info">
+              <p><strong>La Direction Générale</strong></p>
+              <p>La Cellule de Pilotage de déploiement et des extensions</p>
             </div>
+          </div>
+          <div class="bon-frame">
+            <div class="dotted-line"></div>
             <div class="bon-title">BON DE CARBURANT N° : _______________</div>
-            <table class="bon-table">
-              <tbody>
-                <tr>
-                  <th>Date</th>
-                  <td>${formatDateForDisplay(item.date)}</td>
-                  <th>Matricule du véhicule</th>
-                  <td>${escapeHtml(item.vehicule?.matricule || "")}</td>
-                </tr>
-                <tr>
-                  <th>Type de Voiture</th>
-                  <td>${escapeHtml(item.vehicule?.vehicule || "")}</td>
-                  <th>Nom du conducteur</th>
-                  <td>${escapeHtml(item.vehicule?.chauffeurResponsable || "")}</td>
-                </tr>
-                <tr>
-                  <th>Quantité de carburant (Litres)</th>
-                  <td>${formatNumber(item.nLiter)}</td>
-                  <th>Montant</th>
-                  <td>${formatNumber(item.montantRavitaille)}</td>
-                </tr>
-                <tr>
-                  <th>Montant en lettres</th>
-                  <td colspan="3">${escapeHtml(numberToWordsFr(item.montantRavitaille))}</td>
-                </tr>
-                <tr>
-                  <th>Montant réellement Ravitaillé</th>
-                  <td colspan="3"></td>
-                </tr>
-                <tr>
-                  <th>Station-service</th>
-                  <td colspan="3"></td>
-                </tr>
-                <tr>
-                  <th>Signature du responsable Station</th>
-                  <td colspan="3" style="height:48px;"></td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="dotted-line"></div>
+            <div class="bon-fields">
+              <div class="field-row">
+                <span class="field-label">Date :</span>
+                <span class="field-value">${formatDateForDisplay(item.date)}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Matricule du véhicule :</span>
+                <span class="field-value">${escapeHtml(item.vehicule?.matricule || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Type de Voiture :</span>
+                <span class="field-value">${escapeHtml(item.vehicule?.vehicule || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Nom du conducteur :</span>
+                <span class="field-value">${escapeHtml(item.vehicule?.chauffeurResponsable || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Quantité de carburant (Litres) :</span>
+                <span class="field-value">${formatNumber(item.nLiter)}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Montant :</span>
+                <span class="field-value">${formatNumber(item.montantRavitaille)} MRU</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Montant en lettres :</span>
+                <span class="field-value">${escapeHtml(numberToWordsFr(item.montantRavitaille))}</span>
+              </div>
+              <div class="field-row field-bold">
+                <span class="field-label">Montant réellement Ravitaillé :</span>
+                <span class="field-value"></span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Station-service :</span>
+                <span class="field-value"></span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Signature du responsable Station :</span>
+                <span class="field-value"></span>
+              </div>
+            </div>
             <div class="bon-signatures">
               <div class="bon-sig">
                 <p class="bon-sig-title">Signature Chef Département</p>
-                <div class="bon-sig-line"></div>
+                <div class="bon-sig-space"></div>
               </div>
               <div class="bon-sig">
                 <p class="bon-sig-title">VISA Directeur Général</p>
-                <div class="bon-sig-line"></div>
+                <div class="bon-sig-space"></div>
               </div>
             </div>
           </div>
-        `
-      )
-      .join("");
+        </div>
+      `;
+    }
+
+    const emptyBon = `<div class="bon"></div>`;
+
+    const pages: string[] = [];
+    for (let i = 0; i < selectedRavitaillements.length; i += 2) {
+      const first = selectedRavitaillements[i];
+      const second = selectedRavitaillements[i + 1];
+      const isLast = i + 2 >= selectedRavitaillements.length;
+      pages.push(`
+        <div class="page${isLast ? "" : " page-break"}">
+          ${bonHtml(first)}
+          <div class="separator"></div>
+          ${second ? bonHtml(second) : emptyBon}
+        </div>
+      `);
+    }
 
     printWindow.document.write(`
       <!doctype html>
@@ -704,30 +711,33 @@ export default function RavitaillementVehiculePage() {
           <title>Bons de Carburant</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; margin: 0; color: #1f2937; font-size: 12px; }
-            .bon { padding: 28px 32px; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
+            .page { display: flex; flex-direction: row; align-items: stretch; }
             .page-break { page-break-after: always; }
-            .bon-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 3px solid #166534; padding-bottom: 12px; margin-bottom: 16px; }
-            .bon-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
-            .bon-header-text { flex: 1; text-align: center; }
-            .bon-header-text h2 { margin: 0; font-size: 20px; font-weight: 700; }
-            .bon-header-text h3 { margin: 4px 0 0; font-size: 14px; font-weight: 700; }
-            .bon-header-text h4 { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: #374151; }
-            .bon-title { text-align: center; font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 20px; border: 2px solid #166534; padding: 10px; border-radius: 6px; }
-            .bon-table { width: 100%; border-collapse: collapse; }
-            .bon-table th, .bon-table td { border: 1px solid #9ca3af; padding: 9px 10px; font-size: 12px; vertical-align: middle; }
-            .bon-table th { background: #f3f4f6; font-weight: 700; width: 28%; }
-            .bon-signatures { display: flex; gap: 40px; margin-top: 48px; justify-content: space-around; }
+            .bon { flex: 1; display: flex; flex-direction: column; padding: 6mm 4mm; }
+            .separator { width: 0; border-left: 2px dashed #9ca3af; margin: 0; align-self: stretch; }
+            .bon-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+            .bon-header img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+            .bon-header-info p { margin: 1px 0; font-size: 10px; }
+            .bon-frame { border: 2px solid #1f2937; padding: 6px 10px 10px; flex: 1; display: flex; flex-direction: column; }
+            .dotted-line { border-top: 1px dashed #374151; margin: 4px 0; }
+            .bon-title { text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 5px 0; }
+            .bon-fields { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+            .field-row { display: flex; align-items: baseline; gap: 4px; border-bottom: 1px solid #374151; padding-bottom: 3px; }
+            .field-label { white-space: nowrap; font-size: 10px; flex-shrink: 0; }
+            .field-value { font-size: 10px; flex: 1; }
+            .field-bold .field-label,
+            .field-bold .field-value { font-weight: 700; }
+            .bon-signatures { display: flex; gap: 8px; margin-top: 10px; justify-content: space-around; }
             .bon-sig { flex: 1; text-align: center; }
-            .bon-sig-title { font-weight: 700; font-size: 11px; text-transform: uppercase; margin: 0 0 40px; }
-            .bon-sig-line { border-bottom: 1px solid #374151; margin: 0 16px; }
+            .bon-sig-title { font-weight: 700; font-size: 9px; text-transform: uppercase; margin: 0 0 4px; }
+            .bon-sig-space { height: 50px; }
             @media print {
-              @page { margin: 0; size: A4; }
-              .bon { padding: 20px 24px; }
+              @page { margin: 15mm; size: A4 portrait; }
             }
           </style>
         </head>
-        <body>${bonsHtml}</body>
+        <body>${pages.join("")}</body>
       </html>
     `);
     printWindow.document.close();
