@@ -504,6 +504,8 @@ export default function RavitaillementVehiculePage() {
     const zone = zones[0] ?? "—";
     const isCdpe = zone.toUpperCase().includes("CDPE");
     const today = new Date().toLocaleDateString("fr-FR");
+    const zoomLevel = Math.min(100, Math.round(1400 / selectedRavitaillements.length)) + "%";
+    const tableFontSize = Math.min(11, Math.round(200 / selectedRavitaillements.length));
     const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
 
     const rowsHtml = selectedRavitaillements
@@ -546,7 +548,7 @@ export default function RavitaillementVehiculePage() {
           <title>Situation des Dépenses CARBURANT</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; zoom: ${zoomLevel}; }
             .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
             .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
             .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
@@ -562,8 +564,9 @@ export default function RavitaillementVehiculePage() {
             .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 60px; }
             @media print {
-              @page { size: A4 landscape; margin: 8mm; }
-              body { zoom: 75%; }
+              @page { size: A4 landscape; margin: 5mm; }
+              body { zoom: ${zoomLevel}; }
+              table { font-size: ${tableFontSize}px; }
             }
           </style>
         </head>
