@@ -11,7 +11,10 @@ interface VehiculeFormState {
   utilisationAffectation: string;
   chauffeurResponsable: string;
   zone: string;
+  zoneAutre: string;
 }
+
+const ZONES_FIXES = ["Zone A", "Zone B", "RS", "FO", "CDPE"] as const;
 
 const initialFormState: VehiculeFormState = {
   vehicule: "",
@@ -19,6 +22,7 @@ const initialFormState: VehiculeFormState = {
   utilisationAffectation: "",
   chauffeurResponsable: "",
   zone: "Zone A",
+  zoneAutre: "",
 };
 
 export default function VehiculePage() {
@@ -52,12 +56,14 @@ export default function VehiculePage() {
 
   function openEditModal(item: Vehicule) {
     setEditingVehicule(item);
+    const isKnownZone = (ZONES_FIXES as readonly string[]).includes(item.zone);
     setForm({
       vehicule: item.vehicule,
       matricule: item.matricule,
       utilisationAffectation: item.utilisationAffectation,
       chauffeurResponsable: item.chauffeurResponsable || "",
-      zone: item.zone,
+      zone: isKnownZone ? item.zone : "Autre",
+      zoneAutre: isKnownZone ? "" : item.zone,
     });
     setIsModalOpen(true);
   }
@@ -69,12 +75,13 @@ export default function VehiculePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const zoneValue = form.zone === "Autre" ? form.zoneAutre.trim() : form.zone.trim();
     const payload = {
       vehicule: form.vehicule.trim(),
       matricule: form.matricule.trim(),
       utilisationAffectation: form.utilisationAffectation.trim(),
       chauffeurResponsable: form.chauffeurResponsable.trim(),
-      zone: form.zone.trim(),
+      zone: zoneValue,
     };
 
     if (!payload.vehicule || !payload.matricule || !payload.utilisationAffectation || !payload.zone) {
@@ -358,9 +365,22 @@ export default function VehiculePage() {
                 onChange={(event) => updateForm("zone", event.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
               >
-                <option value="Zone A">Zone A</option>
-                <option value="Zone B">Zone B</option>
+                <option value="Zone A">Département Zone A (Zone A)</option>
+                <option value="Zone B">Département Zone B (Zone B)</option>
+                <option value="RS">Département Réseaux et Systèmes (RS)</option>
+                <option value="FO">Département Fibre Optique (FO)</option>
+                <option value="CDPE">Cellule de Pilotage de Déploiement et des Extensions (CDPE)</option>
+                <option value="Autre">Autre</option>
               </select>
+              {form.zone === "Autre" && (
+                <input
+                  type="text"
+                  value={form.zoneAutre}
+                  onChange={(event) => updateForm("zoneAutre", event.target.value)}
+                  className="mt-2 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                  placeholder="Précisez la zone..."
+                />
+              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

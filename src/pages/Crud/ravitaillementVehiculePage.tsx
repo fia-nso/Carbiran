@@ -713,27 +713,27 @@ export default function RavitaillementVehiculePage() {
           <title>Bons de Carburant</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
-            .page { display: flex; flex-direction: row; align-items: stretch; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 0; }
+            .page { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
             .page-break { page-break-after: always; }
-            .bon { flex: 1; display: flex; flex-direction: column; padding: 6mm 4mm; }
-            .separator { width: 0; border-left: 2px dashed #9ca3af; margin: 0; align-self: stretch; }
-            .bon-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
-            .bon-header img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
-            .bon-header-info p { margin: 1px 0; font-size: 10px; }
-            .bon-frame { border: 2px solid #1f2937; padding: 6px 10px 10px; flex: 1; display: flex; flex-direction: column; }
-            .dotted-line { border-top: 1px dashed #374151; margin: 4px 0; }
-            .bon-title { text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 5px 0; }
-            .bon-fields { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-            .field-row { display: flex; align-items: baseline; gap: 4px; border-bottom: 1px solid #374151; padding-bottom: 3px; }
-            .field-label { white-space: nowrap; font-size: 10px; flex-shrink: 0; }
-            .field-value { font-size: 10px; flex: 1; }
+            .bon { height: 148.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
+            .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
+            .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+            .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
+            .bon-header-info p { margin: 2px 0; font-size: 12px; }
+            .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+            .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }
+            .bon-title { text-align: center; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 0; }
+            .bon-fields { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+            .field-row { display: flex; align-items: baseline; gap: 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+            .field-label { white-space: nowrap; font-size: 11px; flex-shrink: 0; }
+            .field-value { font-size: 11px; flex: 1; }
             .field-bold .field-label,
             .field-bold .field-value { font-weight: 700; }
-            .bon-signatures { display: flex; gap: 8px; margin-top: 10px; justify-content: space-around; }
+            .bon-signatures { display: flex; gap: 12px; margin-top: 12px; justify-content: space-around; }
             .bon-sig { flex: 1; text-align: center; }
-            .bon-sig-title { font-weight: 700; font-size: 9px; text-transform: uppercase; margin: 0 0 4px; }
-            .bon-sig-space { height: 50px; }
+            .bon-sig-title { font-weight: 700; font-size: 11px; text-transform: uppercase; margin: 0 0 6px; }
+            .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
             @media print {
               @page { margin: 0; size: A4 portrait; }
             }
