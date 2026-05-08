@@ -616,7 +616,7 @@ export default function RavitaillementVehiculePage() {
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
 
-    function bonHtml(item: (typeof selectedRavitaillements)[0]) {
+    function bonHtml(item: (typeof selectedRavitaillements)[0], num: number) {
       const itemZone = item.vehicule?.zone ?? "";
       const itemIsCdpe = itemZone.toUpperCase().includes("CDPE");
       const bonHeaderInfo = itemIsCdpe
@@ -630,7 +630,7 @@ export default function RavitaillementVehiculePage() {
           </div>
           <div class="bon-frame">
             <div class="dotted-line"></div>
-            <div class="bon-title">BON DE CARBURANT N° : _______________</div>
+            <div class="bon-title">BON DE CARBURANT N° : ${num}</div>
             <div class="dotted-line"></div>
             <div class="bon-fields">
               <div class="field-row">
@@ -691,16 +691,20 @@ export default function RavitaillementVehiculePage() {
 
     const emptyBon = `<div class="bon"></div>`;
 
+    const sorted = [...selectedRavitaillements].sort((a, b) =>
+      (a.vehicule?.zone ?? "").localeCompare(b.vehicule?.zone ?? "", "fr")
+    );
+
     const pages: string[] = [];
-    for (let i = 0; i < selectedRavitaillements.length; i += 2) {
-      const first = selectedRavitaillements[i];
-      const second = selectedRavitaillements[i + 1];
-      const isLast = i + 2 >= selectedRavitaillements.length;
+    for (let i = 0; i < sorted.length; i += 2) {
+      const first = sorted[i];
+      const second = sorted[i + 1];
+      const isLast = i + 2 >= sorted.length;
       pages.push(`
         <div class="page${isLast ? "" : " page-break"}">
-          ${bonHtml(first)}
+          ${bonHtml(first, i + 1)}
           <div class="separator"></div>
-          ${second ? bonHtml(second) : emptyBon}
+          ${second ? bonHtml(second, i + 2) : emptyBon}
         </div>
       `);
     }
@@ -720,19 +724,19 @@ export default function RavitaillementVehiculePage() {
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
             .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
             .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
-            .bon-header-info p { margin: 2px 0; font-size: 12px; }
+            .bon-header-info p { margin: 2px 0; font-size: 16px; }
             .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
             .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }
-            .bon-title { text-align: center; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 0; }
+            .bon-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 0; }
             .bon-fields { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
             .field-row { display: flex; align-items: baseline; gap: 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
-            .field-label { white-space: nowrap; font-size: 11px; flex-shrink: 0; }
-            .field-value { font-size: 11px; flex: 1; }
+            .field-label { white-space: nowrap; font-size: 14px; flex-shrink: 0; }
+            .field-value { font-size: 14px; flex: 1; }
             .field-bold .field-label,
-            .field-bold .field-value { font-weight: 700; }
+            .field-bold .field-value { font-weight: 700; font-size: 15px; }
             .bon-signatures { display: flex; gap: 12px; margin-top: 12px; justify-content: space-around; }
             .bon-sig { flex: 1; text-align: center; }
-            .bon-sig-title { font-weight: 700; font-size: 11px; text-transform: uppercase; margin: 0 0 6px; }
+            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
             .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
             @media print {
               @page { margin: 0; size: A4 portrait; }
