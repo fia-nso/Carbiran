@@ -530,12 +530,12 @@ export default function RavitaillementVehiculePage() {
     const signaturesHtml = isCdpe
       ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule de Contrôle, Suivi &amp; Évaluation</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule de Contrôle, Suivi &amp; Évaluation</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
 
     printWindow.document.write(`
@@ -562,7 +562,7 @@ export default function RavitaillementVehiculePage() {
             .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 60px; }
             @media print {
-              @page { margin: 15mm; size: A4 portrait; }
+              @page { margin: 0; size: A4 landscape; }
             }
           </style>
         </head>
@@ -617,14 +617,16 @@ export default function RavitaillementVehiculePage() {
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
 
     function bonHtml(item: (typeof selectedRavitaillements)[0]) {
+      const itemZone = item.vehicule?.zone ?? "";
+      const itemIsCdpe = itemZone.toUpperCase().includes("CDPE");
+      const bonHeaderInfo = itemIsCdpe
+        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
+        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
       return `
         <div class="bon">
           <div class="bon-header">
             <img src="${logoUrl}" alt="Logo RIMATEL" />
-            <div class="bon-header-info">
-              <p><strong>La Direction Générale</strong></p>
-              <p>La Cellule de Pilotage de déploiement et des extensions</p>
-            </div>
+            <div class="bon-header-info">${bonHeaderInfo}</div>
           </div>
           <div class="bon-frame">
             <div class="dotted-line"></div>
@@ -733,7 +735,7 @@ export default function RavitaillementVehiculePage() {
             .bon-sig-title { font-weight: 700; font-size: 9px; text-transform: uppercase; margin: 0 0 4px; }
             .bon-sig-space { height: 50px; }
             @media print {
-              @page { margin: 15mm; size: A4 portrait; }
+              @page { margin: 0; size: A4 portrait; }
             }
           </style>
         </head>
