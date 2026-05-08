@@ -15,6 +15,7 @@ export default function NouvelleDemandePage() {
 
   const [departement, setDepartement] = useState<Departement>("Zone A");
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [matriculeSearch, setMatriculeSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +27,7 @@ export default function NouvelleDemandePage() {
 
   useEffect(() => {
     setSelected(new Set());
+    setMatriculeSearch("");
   }, [departement]);
 
   const vehiculesDept = useMemo(
@@ -33,7 +35,19 @@ export default function NouvelleDemandePage() {
     [allVehicules, departement]
   );
 
-  const allSelected = vehiculesDept.length > 0 && selected.size === vehiculesDept.length;
+  const vehiculesFiltres = useMemo(
+    () =>
+      matriculeSearch === ""
+        ? vehiculesDept
+        : vehiculesDept.filter((v) =>
+            v.matricule.toLowerCase().includes(matriculeSearch.toLowerCase())
+          ),
+    [vehiculesDept, matriculeSearch]
+  );
+
+  const allSelected =
+    vehiculesFiltres.length > 0 &&
+    vehiculesFiltres.every((v) => selected.has(v.id));
 
   function toggleVehicule(id: number) {
     setSelected((prev) => {
@@ -46,9 +60,17 @@ export default function NouvelleDemandePage() {
 
   function toggleAll() {
     if (allSelected) {
-      setSelected(new Set());
+      setSelected((prev) => {
+        const next = new Set(prev);
+        vehiculesFiltres.forEach((v) => next.delete(v.id));
+        return next;
+      });
     } else {
-      setSelected(new Set(vehiculesDept.map((v) => v.id)));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        vehiculesFiltres.forEach((v) => next.add(v.id));
+        return next;
+      });
     }
   }
 
@@ -131,6 +153,18 @@ export default function NouvelleDemandePage() {
             )}
           </div>
 
+          {!vLoading && vehiculesDept.length > 0 && (
+            <div className="px-6 py-3 border-b border-gray-100">
+              <input
+                type="text"
+                value={matriculeSearch}
+                onChange={(e) => setMatriculeSearch(e.target.value)}
+                placeholder="Rechercher par matricule..."
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent placeholder-gray-400"
+              />
+            </div>
+          )}
+
           {vLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin w-6 h-6 border-4 border-gray-200 border-t-teal-500 rounded-full" />
@@ -139,9 +173,13 @@ export default function NouvelleDemandePage() {
             <p className="text-center text-gray-400 py-12 text-sm">
               Aucun véhicule dans ce département.
             </p>
+          ) : vehiculesFiltres.length === 0 ? (
+            <p className="text-center text-gray-400 py-10 text-sm">
+              Aucun véhicule ne correspond à cette matricule.
+            </p>
           ) : (
             <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
-              {vehiculesDept.map((v) => (
+              {vehiculesFiltres.map((v) => (
                 <label
                   key={v.id}
                   className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-colors ${

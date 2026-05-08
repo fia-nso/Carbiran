@@ -4,7 +4,13 @@ import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { uploadPhoto } from "@/lib/uploadPhoto";
-import type { DemandeRavitaillement, DemandeVehicule, StatutDemande, TypePhoto } from "@/types";
+import type {
+  DemandeRavitaillement,
+  DemandeVehicule,
+  PhotoJustification,
+  StatutDemande,
+  TypePhoto,
+} from "@/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,8 +23,15 @@ interface RavForm {
   photos: Partial<Record<TypePhoto, File>>;
 }
 
+interface VehiculeInfo {
+  vehicule: string;
+  matricule: string;
+  chauffeur_responsable: string | null;
+  zone: string;
+}
+
 // ---------------------------------------------------------------------------
-// DB row → domain mapper (mirrors useDemandes private mappers)
+// DB row → domain mapper
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,10 +87,10 @@ const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> =
 };
 
 const DV_STATUT: Record<string, { label: string; classes: string }> = {
-  en_attente: { label: "En attente",   classes: "bg-orange-100 text-orange-700" },
-  ravitaille: { label: "Ravitaillé",   classes: "bg-blue-100 text-blue-700" },
-  valide:     { label: "Validé",       classes: "bg-green-100 text-green-700" },
-  refuse:     { label: "Refusé",       classes: "bg-red-100 text-red-700" },
+  en_attente: { label: "En attente", classes: "bg-orange-100 text-orange-700" },
+  ravitaille: { label: "Ravitaillé", classes: "bg-blue-100 text-blue-700" },
+  valide:     { label: "Validé",     classes: "bg-green-100 text-green-700" },
+  refuse:     { label: "Refusé",     classes: "bg-red-100 text-red-700" },
 };
 
 function StatutBadge({ statut }: { statut: StatutDemande }) {
@@ -99,8 +112,8 @@ function DvStatutBadge({ statut }: { statut: string }) {
 }
 
 const PHOTO_LABELS: Record<TypePhoto, string> = {
-  vehicule_avant: "Avant",
-  vehicule_apres: "Après",
+  vehicule_avant: "Véhicule avant",
+  vehicule_apres: "Véhicule après",
   pompe:          "Pompe",
 };
 
@@ -120,18 +133,20 @@ export default function DetailDemandePage() {
   } = useDemandes();
 
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
+  const [vehiculeInfoMap, setVehiculeInfoMap] = useState<Record<number, VehiculeInfo>>({});
+  const [photosMap, setPhotosMap] = useState<Record<string, PhotoJustification[]>>({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
 
-  const isChefDept   = user?.role === "chef_departement";
-  const isStation    = user?.role === "responsable_station";
-  const isCellule    = user?.role === "Admin" || user?.role === "MENAGER";
+  const isChefDept = user?.role === "chef_departement";
+  const isStation  = user?.role === "responsable_station";
+  const isCellule  = user?.role === "Admin" || user?.role === "MENAGER";
 
   // -------------------------------------------------------------------------
-  // Fetch
+  // Fetch demande + vehicule info + photos (parallel after demande loads)
   // -------------------------------------------------------------------------
 
   const fetchDemande = useCallback(async () => {
@@ -145,7 +160,46 @@ export default function DetailDemandePage() {
         .eq("id", id)
         .single();
       if (error) throw error;
-      setDemande(mapRow(data));
+
+      const mapped = mapRow(data);
+      setDemande(mapped);
+
+      const dvs = mapped.demande_vehicules ?? [];
+      const vehiculeIds = dvs.map((dv) => dv.vehicule_id);
+      const dvIds       = dvs.map((dv) => dv.id);
+      const needPhotos  = ["validee_station", "validee_cellule"].includes(mapped.statut);
+
+      const [vResult, pResult] = await Promise.all([
+        vehiculeIds.length > 0
+          ? supabase
+              .from("vehicules")
+              .select("id, vehicule, matricule, chauffeur_responsable, zone")
+              .in("id", vehiculeIds)
+          : Promise.resolve({ data: [] as VehiculeInfo[], error: null }),
+
+        needPhotos && dvIds.length > 0
+          ? supabase
+              .from("photos_justification")
+              .select("id, demande_vehicule_id, url, type, uploaded_at")
+              .in("demande_vehicule_id", dvIds)
+          : Promise.resolve({ data: [] as PhotoJustification[], error: null }),
+      ]);
+
+      // Vehicule info map
+      const vMap: Record<number, VehiculeInfo> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (vResult.data ?? []).forEach((v: any) => { vMap[v.id] = v; });
+      setVehiculeInfoMap(vMap);
+
+      // Photos map keyed by demande_vehicule_id
+      const pMap: Record<string, PhotoJustification[]> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (pResult.data ?? []).forEach((p: any) => {
+        if (!pMap[p.demande_vehicule_id]) pMap[p.demande_vehicule_id] = [];
+        pMap[p.demande_vehicule_id].push(p as PhotoJustification);
+      });
+      setPhotosMap(pMap);
+
     } catch (e: unknown) {
       setFetchError(e instanceof Error ? e.message : "Erreur de chargement.");
     } finally {
@@ -319,7 +373,6 @@ export default function DetailDemandePage() {
             </div>
             <p className="text-sm text-gray-500 mt-1">
               Créée le {new Date(demande.created_at).toLocaleDateString("fr-FR")}
-              {demande.creator?.full_name ? ` · ${demande.creator.full_name}` : ""}
               {" · "}
               {demande.demande_vehicules?.length ?? 0} véhicule(s)
             </p>
@@ -328,7 +381,6 @@ export default function DetailDemandePage() {
 
         {/* Action bar */}
         <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
-          {/* Chef département — en attente */}
           {isChefDept && demande.statut === "en_attente" && (
             <>
               <button
@@ -348,7 +400,6 @@ export default function DetailDemandePage() {
             </>
           )}
 
-          {/* Responsable station — tous ravitaillés → soumettre à la cellule */}
           {isStation && demande.statut === "validee_dept" && allRavitaille && (
             <button
               onClick={handleValiderStation}
@@ -359,7 +410,6 @@ export default function DetailDemandePage() {
             </button>
           )}
 
-          {/* Cellule — valider */}
           {isCellule && demande.statut === "validee_station" && (
             <button
               onClick={handleValiderCellule}
@@ -370,7 +420,6 @@ export default function DetailDemandePage() {
             </button>
           )}
 
-          {/* Chef département — après validation cellule : imprimer */}
           {isChefDept && demande.statut === "validee_cellule" && (
             <>
               <button
@@ -394,7 +443,6 @@ export default function DetailDemandePage() {
             </>
           )}
 
-          {/* Statut terminal info */}
           {demande.statut === "annulee" && (
             <span className={`px-4 py-2 rounded-xl text-sm font-medium border ${statutCfg.classes}`}>
               Demande annulée
@@ -403,7 +451,6 @@ export default function DetailDemandePage() {
         </div>
       </div>
 
-      {/* Submit error */}
       {submitError && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
           {submitError}
@@ -420,6 +467,8 @@ export default function DetailDemandePage() {
             isStation={isStation}
             isCellule={isCellule}
             isChefDept={isChefDept}
+            vehiculeInfo={vehiculeInfoMap[dv.vehicule_id]}
+            photos={photosMap[dv.id]}
             ravForm={ravForms[dv.id]}
             processing={processing}
             onUpdateForm={(patch) => updateRavForm(dv.id, patch)}
@@ -444,6 +493,8 @@ interface VehiculeCardProps {
   isStation: boolean;
   isCellule: boolean;
   isChefDept: boolean;
+  vehiculeInfo?: VehiculeInfo;
+  photos?: PhotoJustification[];
   ravForm: RavForm | undefined;
   processing: string | null;
   onUpdateForm: (patch: Partial<Omit<RavForm, "photos">>) => void;
@@ -457,30 +508,36 @@ function VehiculeCard({
   isStation,
   isCellule,
   isChefDept,
+  vehiculeInfo,
+  photos,
   ravForm,
   processing,
   onUpdateForm,
   onUpdatePhoto,
   onSubmit,
 }: VehiculeCardProps) {
-  const showForm      = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts   = (isCellule || isChefDept) && dv.statut !== "en_attente";
-  const showPhotos    = (isCellule || isChefDept || isStation) && (dv.photos?.length ?? 0) > 0;
-  const isSaving      = processing === `rav_${dv.id}`;
+  const showForm    = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
+  const showAmounts = (isCellule || isChefDept) && dv.statut !== "en_attente";
+  const showPhotos  = isCellule && (photos?.length ?? 0) > 0;
+  const isSaving    = processing === `rav_${dv.id}`;
+
+  const vehiculeLabel = vehiculeInfo
+    ? `${vehiculeInfo.matricule} · ${vehiculeInfo.vehicule}`
+    : `Véhicule #${dv.vehicule_id}`;
+
+  const vehiculeSubLabel = vehiculeInfo
+    ? [vehiculeInfo.chauffeur_responsable, vehiculeInfo.zone].filter(Boolean).join(" · ")
+    : "";
 
   return (
     <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-      {/* Card header */}
+      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900 truncate">
-            {dv.vehicule?.vehicule ?? `Véhicule #${dv.vehicule_id}`}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {dv.vehicule?.matricule}
-            {dv.vehicule?.chauffeurResponsable ? ` · ${dv.vehicule.chauffeurResponsable}` : ""}
-            {dv.vehicule?.zone ? ` · ${dv.vehicule.zone}` : ""}
-          </p>
+          <p className="font-semibold text-gray-900 truncate">{vehiculeLabel}</p>
+          {vehiculeSubLabel && (
+            <p className="text-xs text-gray-500 mt-0.5">{vehiculeSubLabel}</p>
+          )}
         </div>
         <DvStatutBadge statut={dv.statut} />
       </div>
@@ -488,43 +545,58 @@ function VehiculeCard({
       {/* Amounts (cellule / chef after ravitaillement) */}
       {showAmounts && (dv.montant != null || dv.n_liter != null || dv.kilometrage != null) && (
         <div className="px-6 py-4 grid grid-cols-3 gap-4 bg-gray-50 border-b border-gray-100">
-          <AmountCell label="Montant" value={dv.montant} unit="DA" />
-          <AmountCell label="Litres" value={dv.n_liter} unit="L" />
+          <AmountCell label="Montant" value={dv.montant} unit="MRU" />
+          <AmountCell label="Litres"  value={dv.n_liter}  unit="L" />
           <AmountCell label="Kilométrage" value={dv.kilometrage} unit="km" />
         </div>
       )}
 
-      {/* Photos */}
+      {/* Photos (cellule only — fetched when status ≥ validee_station) */}
       {showPhotos && (
         <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
             Photos justificatives
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {(dv.photos ?? []).map((photo) => (
-              <div key={photo.id} className="space-y-1">
-                <img
-                  src={photo.url}
-                  alt={PHOTO_LABELS[photo.type]}
-                  className="w-full h-32 object-cover rounded-xl border border-gray-200"
-                />
-                <p className="text-xs text-center text-gray-500">{PHOTO_LABELS[photo.type]}</p>
-              </div>
-            ))}
+            {(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).map((type) => {
+              const photo = photos?.find((p) => p.type === type);
+              return (
+                <div key={type} className="space-y-1">
+                  {photo ? (
+                    <a
+                      href={photo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-xl overflow-hidden border border-gray-200 hover:opacity-90 transition-opacity"
+                    >
+                      <img
+                        src={photo.url}
+                        alt={PHOTO_LABELS[type]}
+                        className="w-full h-32 object-cover"
+                      />
+                    </a>
+                  ) : (
+                    <div className="w-full h-32 rounded-xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+                      <span className="text-xs text-gray-400">Pas de photo</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-center text-gray-500">{PHOTO_LABELS[type]}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Responsable station — saisie form */}
+      {/* Saisie form (responsable station) */}
       {showForm && ravForm && (
         <div className="px-6 py-5 space-y-5">
           <p className="text-sm font-semibold text-gray-700">Saisir le ravitaillement</p>
 
-          {/* Numeric fields */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <NumericField
               id={`montant-${dv.id}`}
-              label="Montant (DA)"
+              label="Montant (MRU)"
               value={ravForm.montant}
               onChange={(v) => onUpdateForm({ montant: v })}
             />
@@ -542,7 +614,6 @@ function VehiculeCard({
             />
           </div>
 
-          {/* Photo uploads */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
               Photos ({(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).filter((t) => ravForm.photos[t]).length}/3)
