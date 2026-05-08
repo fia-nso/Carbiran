@@ -23,7 +23,7 @@ const RequireRole: React.FC<RequireRoleProps> = ({ roles }) => {
   }
 
   if (!roles.includes(user.role)) {
-    return <Navigate to="/ravitaillements" replace />;
+    return <Navigate to="/demandes" replace />;
   }
 
   return <Outlet />;

@@ -2,9 +2,10 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ScrollToTop from "./ScrollToTop";
-import LoginPage from "../pages/Auth/LoginPage"; 
+import LoginPage from "../pages/Auth/LoginPage";
 import RootLayout from "../pages/layout";
 import { AuthProvider } from "@/context/AuthProvider";
+import { useAuthContext } from "@/context/AuthProvider";
 import ProtectedRoute from "./RouteProtected";
 import RequireRole from "./RequireRole";
 import ChangePasswordPage from "@/pages/ChangePasswordPage";
@@ -17,43 +18,75 @@ import DemandesPage from "@/pages/Demandes/demandesPage";
 import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
 import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
 
+// Redirige vers /dashboard pour Admin/MENAGER, vers /demandes pour tous les autres.
+function DefaultRedirect() {
+  const { user, loading } = useAuthContext();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-green-600 rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (user.role === "Admin" || user.role === "MENAGER") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Navigate to="/demandes" replace />;
+}
+
 const AppRouter: React.FC = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      {/* <QueryClientProvider client={qClient}> */}
-        <AuthProvider>
-          <Routes>
-            {/* Public route (login) */}
-              <Route path="/login" element={<LoginPage />} />
+      <AuthProvider>
+        <Routes>
+          {/* Public */}
+          <Route path="/login" element={<LoginPage />} />
 
-            {/* Routes protégées qui utilisent le layout */}
-            <Route element={<ProtectedRoute />}>
-              {/* Layout wraps all authenticated pages */}
-              <Route element={<RootLayout />}>
-                <Route index element={<Navigate to="/dashboard" replace />} />
+          {/* Protégées — utilisent le layout */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<RootLayout />}>
+
+              {/* Redirection intelligente selon le rôle */}
+              <Route index element={<DefaultRedirect />} />
+
+              {/* Admin + MENAGER uniquement */}
+              <Route element={<RequireRole roles={["Admin", "MENAGER"]} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
                 <Route path="/vehicules" element={<VehiculePage />} />
-                <Route path="/chpass" element={<ChangePasswordPage />} />
-                <Route path="/demandes" element={<DemandesPage />} />
-                <Route path="/demandes/:id" element={<DetailDemandePage />} />
-                <Route element={<RequireRole roles={["chef_de_cours"]} />}>
-                  <Route path="/demandes/nouvelle" element={<NouvelleDemandePage />} />
-                </Route>
-                <Route element={<RequireRole roles={["Admin"]} />}>
-                  <Route path="/users" element={<UsersPage />} />
-                  <Route path="/logs" element={<ActivityLogsPage />} />
-                </Route>
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
-            </Route>
 
-            {/* fallback for any other unmatched (unauthenticated) */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-       </AuthProvider>
-      {/* </QueryClientProvider> */}
+              {/* Admin uniquement */}
+              <Route element={<RequireRole roles={["Admin"]} />}>
+                <Route path="/users" element={<UsersPage />} />
+                <Route path="/logs" element={<ActivityLogsPage />} />
+              </Route>
+
+              {/* Tous les rôles authentifiés */}
+              <Route path="/chpass" element={<ChangePasswordPage />} />
+              <Route path="/demandes" element={<DemandesPage />} />
+              <Route path="/demandes/:id" element={<DetailDemandePage />} />
+
+              {/* chef_de_cours uniquement */}
+              <Route element={<RequireRole roles={["chef_de_cours"]} />}>
+                <Route path="/demandes/nouvelle" element={<NouvelleDemandePage />} />
+              </Route>
+
+              {/* Catch-all dans le layout → redirection intelligente */}
+              <Route path="*" element={<DefaultRedirect />} />
+
+            </Route>
+          </Route>
+
+          {/* Fallback non authentifié */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 };
