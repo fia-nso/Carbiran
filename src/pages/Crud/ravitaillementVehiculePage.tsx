@@ -661,10 +661,6 @@ export default function RavitaillementVehiculePage() {
                 <span class="field-label">Montant en lettres :</span>
                 <span class="field-value">${escapeHtml(numberToWordsFr(item.montantRavitaille))}</span>
               </div>
-              <div class="field-row field-bold">
-                <span class="field-label">Montant réellement Ravitaillé :</span>
-                <span class="field-value"></span>
-              </div>
               <div class="field-row">
                 <span class="field-label">Station-service :</span>
                 <span class="field-value"></span>
