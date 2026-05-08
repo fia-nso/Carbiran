@@ -31,10 +31,7 @@ function mapRow(row: any): DemandeRavitaillement {
     created_at: row.created_at,
     updated_at: row.updated_at,
     creator: row.creator
-      ? {
-          email: row.creator.email,
-          full_name: [row.creator.prenom, row.creator.nom].filter(Boolean).join(" "),
-        }
+      ? { email: row.creator.email, full_name: row.creator.email }
       : undefined,
     demande_vehicules: (row.demande_vehicules ?? []).map(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,7 +61,7 @@ function mapRow(row: any): DemandeRavitaillement {
 
 const DETAIL_SELECT = `
   id, departement, statut, created_by, created_at, updated_at,
-  creator:profiles!created_by(email, nom, prenom),
+  creator:profiles!created_by(email),
   demande_vehicules(
     id, demande_id, vehicule_id, montant, n_liter, kilometrage, statut,
     vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone),

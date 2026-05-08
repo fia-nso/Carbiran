@@ -48,7 +48,7 @@ interface DemandeRow {
   created_at: string;
   updated_at: string;
   demande_vehicules: DemandeVehiculeRow[] | null;
-  creator: { email: string; nom: string | null; prenom: string | null } | null;
+  creator: { email: string } | null;
 }
 
 interface NotificationRow {
@@ -100,10 +100,7 @@ function mapDemandeRow(row: DemandeRow): DemandeRavitaillement {
       ? row.demande_vehicules.map(mapDemandeVehiculeRow)
       : undefined,
     creator: row.creator
-      ? {
-          email: row.creator.email,
-          full_name: [row.creator.prenom, row.creator.nom].filter(Boolean).join(" "),
-        }
+      ? { email: row.creator.email, full_name: row.creator.email }
       : undefined,
   };
 }
@@ -114,7 +111,7 @@ function mapDemandeRow(row: DemandeRow): DemandeRavitaillement {
 
 const DEMANDE_SELECT = `
   id, departement, statut, created_by, created_at, updated_at,
-  creator:profiles!created_by(email, nom, prenom),
+  creator:profiles!created_by(email),
   demande_vehicules(
     id, demande_id, vehicule_id, montant, n_liter, kilometrage, statut,
     vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone),
