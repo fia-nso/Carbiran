@@ -546,7 +546,7 @@ export default function RavitaillementVehiculePage() {
           <title>Situation des Dépenses CARBURANT</title>
           <style>
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; }
             .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
             .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
             .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
@@ -562,7 +562,8 @@ export default function RavitaillementVehiculePage() {
             .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 60px; }
             @media print {
-              @page { margin: 0; size: A4 landscape; }
+              @page { size: A4 landscape; margin: 8mm; }
+              body { zoom: 75%; }
             }
           </style>
         </head>
