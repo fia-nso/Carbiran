@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Header() {
   const { logout, user } = useAuthContext();
@@ -71,6 +72,8 @@ export default function Header() {
                 Securite
               </Link>
             </nav>
+
+            <NotificationBell />
 
             <div className="h-8 w-px bg-white/20 mx-2"></div>
 

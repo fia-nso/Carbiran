@@ -13,7 +13,9 @@ import RavitaillementVehiculePage from "@/pages/Crud/ravitaillementVehiculePage"
 import UsersPage from "@/pages/Admin/usersPage";
 import ActivityLogsPage from "@/pages/Admin/activityLogsPage";
 import DashboardPage from "@/pages/Dashboard/dashboardPage";
- 
+import DemandesPage from "@/pages/Demandes/demandesPage";
+import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
+import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
 
 const AppRouter: React.FC = () => {
   return (
@@ -34,6 +36,11 @@ const AppRouter: React.FC = () => {
                 <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
                 <Route path="/vehicules" element={<VehiculePage />} />
                 <Route path="/chpass" element={<ChangePasswordPage />} />
+                <Route path="/demandes" element={<DemandesPage />} />
+                <Route path="/demandes/:id" element={<DetailDemandePage />} />
+                <Route element={<RequireRole roles={["chef_de_cours"]} />}>
+                  <Route path="/demandes/nouvelle" element={<NouvelleDemandePage />} />
+                </Route>
                 <Route element={<RequireRole roles={["Admin"]} />}>
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/logs" element={<ActivityLogsPage />} />
