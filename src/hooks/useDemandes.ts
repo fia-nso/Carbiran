@@ -6,20 +6,11 @@ import type {
   DemandeVehicule,
   Notification,
   StatutDemande,
-  TypePhoto,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Raw DB row types (snake_case)
 // ---------------------------------------------------------------------------
-
-interface PhotoRow {
-  id: string;
-  demande_vehicule_id: string;
-  url: string;
-  type: TypePhoto;
-  uploaded_at: string;
-}
 
 interface DemandeVehiculeRow {
   id: string;
@@ -29,15 +20,6 @@ interface DemandeVehiculeRow {
   n_liter: number | null;
   kilometrage: number | null;
   statut: string;
-  vehicule: {
-    id: number;
-    vehicule: string;
-    matricule: string;
-    utilisation_affectation: string;
-    chauffeur_responsable: string | null;
-    zone: string;
-  } | null;
-  photos_justification: PhotoRow[] | null;
 }
 
 interface DemandeRow {
@@ -48,7 +30,6 @@ interface DemandeRow {
   created_at: string;
   updated_at: string;
   demande_vehicules: DemandeVehiculeRow[] | null;
-  creator: { email: string } | null;
 }
 
 interface NotificationRow {
@@ -74,17 +55,6 @@ function mapDemandeVehiculeRow(row: DemandeVehiculeRow): DemandeVehicule {
     n_liter: row.n_liter ?? undefined,
     kilometrage: row.kilometrage ?? undefined,
     statut: row.statut as DemandeVehicule["statut"],
-    vehicule: row.vehicule
-      ? {
-          id: row.vehicule.id,
-          vehicule: row.vehicule.vehicule,
-          matricule: row.vehicule.matricule,
-          utilisationAffectation: row.vehicule.utilisation_affectation,
-          chauffeurResponsable: row.vehicule.chauffeur_responsable,
-          zone: row.vehicule.zone,
-        }
-      : undefined,
-    photos: row.photos_justification ?? undefined,
   };
 }
 
@@ -99,9 +69,6 @@ function mapDemandeRow(row: DemandeRow): DemandeRavitaillement {
     demande_vehicules: row.demande_vehicules
       ? row.demande_vehicules.map(mapDemandeVehiculeRow)
       : undefined,
-    creator: row.creator
-      ? { email: row.creator.email, full_name: row.creator.email }
-      : undefined,
   };
 }
 
@@ -110,12 +77,20 @@ function mapDemandeRow(row: DemandeRow): DemandeRavitaillement {
 // ---------------------------------------------------------------------------
 
 const DEMANDE_SELECT = `
-  id, departement, statut, created_by, created_at, updated_at,
-  creator:profiles!created_by(email),
-  demande_vehicules(
-    id, demande_id, vehicule_id, montant, n_liter, kilometrage, statut,
-    vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone),
-    photos_justification(id, demande_vehicule_id, url, type, uploaded_at)
+  id,
+  departement,
+  statut,
+  created_by,
+  created_at,
+  updated_at,
+  demande_vehicules (
+    id,
+    demande_id,
+    vehicule_id,
+    montant,
+    n_liter,
+    kilometrage,
+    statut
   )
 `.trim();
 

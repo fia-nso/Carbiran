@@ -4,7 +4,7 @@ import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { uploadPhoto } from "@/lib/uploadPhoto";
-import type { DemandeRavitaillement, DemandeVehicule, StatutDemande, TypePhoto, Vehicule } from "@/types";
+import type { DemandeRavitaillement, DemandeVehicule, StatutDemande, TypePhoto } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,42 +30,34 @@ function mapRow(row: any): DemandeRavitaillement {
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    creator: row.creator
-      ? { email: row.creator.email, full_name: row.creator.email }
-      : undefined,
-    demande_vehicules: (row.demande_vehicules ?? []).map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (dv: any): DemandeVehicule => ({
-        id: dv.id,
-        demande_id: dv.demande_id,
-        vehicule_id: dv.vehicule_id,
-        montant: dv.montant ?? undefined,
-        n_liter: dv.n_liter ?? undefined,
-        kilometrage: dv.kilometrage ?? undefined,
-        statut: dv.statut,
-        vehicule: dv.vehicule
-          ? ({
-              id: dv.vehicule.id,
-              vehicule: dv.vehicule.vehicule,
-              matricule: dv.vehicule.matricule,
-              utilisationAffectation: dv.vehicule.utilisation_affectation,
-              chauffeurResponsable: dv.vehicule.chauffeur_responsable,
-              zone: dv.vehicule.zone,
-            } as Vehicule)
-          : undefined,
-        photos: dv.photos_justification ?? undefined,
-      })
-    ),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    demande_vehicules: (row.demande_vehicules ?? []).map((dv: any): DemandeVehicule => ({
+      id: dv.id,
+      demande_id: dv.demande_id,
+      vehicule_id: dv.vehicule_id,
+      montant: dv.montant ?? undefined,
+      n_liter: dv.n_liter ?? undefined,
+      kilometrage: dv.kilometrage ?? undefined,
+      statut: dv.statut,
+    })),
   };
 }
 
 const DETAIL_SELECT = `
-  id, departement, statut, created_by, created_at, updated_at,
-  creator:profiles!created_by(email),
-  demande_vehicules(
-    id, demande_id, vehicule_id, montant, n_liter, kilometrage, statut,
-    vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone),
-    photos_justification(id, demande_vehicule_id, url, type, uploaded_at)
+  id,
+  departement,
+  statut,
+  created_by,
+  created_at,
+  updated_at,
+  demande_vehicules (
+    id,
+    demande_id,
+    vehicule_id,
+    montant,
+    n_liter,
+    kilometrage,
+    statut
   )
 `.trim();
 
