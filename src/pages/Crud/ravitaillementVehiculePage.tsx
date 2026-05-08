@@ -552,19 +552,19 @@ export default function RavitaillementVehiculePage() {
             .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
             .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
             .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
-            .doc-header-info p { margin: 2px 0; font-size: 12px; }
-            .doc-date { font-size: 12px; text-align: right; white-space: nowrap; }
-            .doc-title { text-align: center; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
+            .doc-header-info p { margin: 2px 0; font-size: 14px; }
+            .doc-date { font-size: 14px; text-align: right; white-space: nowrap; }
+            .doc-title { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
             table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 10px; }
-            th { background: #1f2937; color: white; font-weight: 700; text-align: center; }
-            tfoot td { font-weight: 700; }
+            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 11px; }
+            th { background: #1f2937; color: white; font-weight: 700; text-align: center; font-size: 12px; }
+            tfoot td { font-weight: 700; font-size: 13px; }
             .signatures { display: flex; gap: 12px; margin-top: 48px; }
             .sig-block { flex: 1; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 10px; margin: 0 0 6px; text-transform: uppercase; }
+            .sig-title { font-weight: 700; font-size: 13px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 60px; }
             @media print {
-              @page { size: A4 landscape; margin: 5mm; }
+              @page { margin: 0; size: A4 landscape; }
               body { zoom: ${zoomLevel}; }
               table { font-size: ${tableFontSize}px; }
             }
