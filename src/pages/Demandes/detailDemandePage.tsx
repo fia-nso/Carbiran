@@ -24,10 +24,76 @@ interface RavForm {
 }
 
 interface VehiculeInfo {
+  id: number;
   vehicule: string;
   matricule: string;
   chauffeur_responsable: string | null;
   zone: string;
+}
+
+// ---------------------------------------------------------------------------
+// Print helpers
+// ---------------------------------------------------------------------------
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function numberToWordsFr(n: number): string {
+  const intPart = Math.floor(Math.abs(n));
+  const ones = [
+    "", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf",
+    "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize",
+    "dix-sept", "dix-huit", "dix-neuf",
+  ];
+
+  function belowHundred(x: number): string {
+    if (x < 20) return ones[x];
+    const d = Math.floor(x / 10);
+    const u = x % 10;
+    if (d === 7) return u === 1 ? "soixante-et-onze" : `soixante-${ones[10 + u]}`;
+    if (d === 8) return u === 0 ? "quatre-vingts" : `quatre-vingt-${ones[u]}`;
+    if (d === 9) return `quatre-vingt-${ones[10 + u]}`;
+    const tens = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante"][d];
+    return u === 0 ? tens : u === 1 && d < 7 ? `${tens}-et-un` : `${tens}-${ones[u]}`;
+  }
+
+  function belowThousand(x: number): string {
+    if (x < 100) return belowHundred(x);
+    const h = Math.floor(x / 100);
+    const r = x % 100;
+    const centWord = h === 1 ? "cent" : `${ones[h]} cent${r === 0 ? "s" : ""}`;
+    return r === 0 ? centWord : `${centWord} ${belowHundred(r)}`;
+  }
+
+  function convert(x: number): string {
+    if (x === 0) return "zéro";
+    if (x < 1000) return belowThousand(x);
+    if (x < 1_000_000) {
+      const t = Math.floor(x / 1000);
+      const r = x % 1000;
+      const tWord = t === 1 ? "mille" : `${belowThousand(t)} mille`;
+      return r === 0 ? tWord : `${tWord} ${belowThousand(r)}`;
+    }
+    const m = Math.floor(x / 1_000_000);
+    const r = x % 1_000_000;
+    const mWord = `${belowThousand(m)} million${m > 1 ? "s" : ""}`;
+    return r === 0 ? mWord : `${mWord} ${convert(r)}`;
+  }
+
+  return n < 0 ? `moins ${convert(intPart)}` : convert(intPart);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +141,7 @@ const DETAIL_SELECT = `
 `.trim();
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Sub-components config
 // ---------------------------------------------------------------------------
 
 const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
@@ -133,7 +199,7 @@ export default function DetailDemandePage() {
   } = useDemandes();
 
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
-  const [vehiculeInfoMap, setVehiculeInfoMap] = useState<Record<number, VehiculeInfo>>({});
+  const [vehiculesMap, setVehiculesMap] = useState<Record<number, VehiculeInfo>>({});
   const [photosMap, setPhotosMap] = useState<Record<string, PhotoJustification[]>>({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -146,7 +212,7 @@ export default function DetailDemandePage() {
   const isCellule  = user?.role === "Admin" || user?.role === "MENAGER";
 
   // -------------------------------------------------------------------------
-  // Fetch demande + vehicule info + photos (parallel after demande loads)
+  // Fetch demande + photos
   // -------------------------------------------------------------------------
 
   const fetchDemande = useCallback(async () => {
@@ -164,42 +230,23 @@ export default function DetailDemandePage() {
       const mapped = mapRow(data);
       setDemande(mapped);
 
-      const dvs = mapped.demande_vehicules ?? [];
-      const vehiculeIds = dvs.map((dv) => dv.vehicule_id);
-      const dvIds       = dvs.map((dv) => dv.id);
-      const needPhotos  = ["validee_station", "validee_cellule"].includes(mapped.statut);
+      const dvIds      = (mapped.demande_vehicules ?? []).map((dv) => dv.id);
+      const needPhotos = ["validee_station", "validee_cellule"].includes(mapped.statut);
 
-      const [vResult, pResult] = await Promise.all([
-        vehiculeIds.length > 0
-          ? supabase
-              .from("vehicules")
-              .select("id, vehicule, matricule, chauffeur_responsable, zone")
-              .in("id", vehiculeIds)
-          : Promise.resolve({ data: [] as VehiculeInfo[], error: null }),
+      if (needPhotos && dvIds.length > 0) {
+        const { data: pData } = await supabase
+          .from("photos_justification")
+          .select("id, demande_vehicule_id, url, type, uploaded_at")
+          .in("demande_vehicule_id", dvIds);
 
-        needPhotos && dvIds.length > 0
-          ? supabase
-              .from("photos_justification")
-              .select("id, demande_vehicule_id, url, type, uploaded_at")
-              .in("demande_vehicule_id", dvIds)
-          : Promise.resolve({ data: [] as PhotoJustification[], error: null }),
-      ]);
-
-      // Vehicule info map
-      const vMap: Record<number, VehiculeInfo> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (vResult.data ?? []).forEach((v: any) => { vMap[v.id] = v; });
-      setVehiculeInfoMap(vMap);
-
-      // Photos map keyed by demande_vehicule_id
-      const pMap: Record<string, PhotoJustification[]> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (pResult.data ?? []).forEach((p: any) => {
-        if (!pMap[p.demande_vehicule_id]) pMap[p.demande_vehicule_id] = [];
-        pMap[p.demande_vehicule_id].push(p as PhotoJustification);
-      });
-      setPhotosMap(pMap);
-
+        const pMap: Record<string, PhotoJustification[]> = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pData ?? []).forEach((p: any) => {
+          if (!pMap[p.demande_vehicule_id]) pMap[p.demande_vehicule_id] = [];
+          pMap[p.demande_vehicule_id].push(p as PhotoJustification);
+        });
+        setPhotosMap(pMap);
+      }
     } catch (e: unknown) {
       setFetchError(e instanceof Error ? e.message : "Erreur de chargement.");
     } finally {
@@ -208,6 +255,27 @@ export default function DetailDemandePage() {
   }, [id]);
 
   useEffect(() => { void fetchDemande(); }, [fetchDemande]);
+
+  // -------------------------------------------------------------------------
+  // Load vehicule info whenever demande changes
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!demande) return;
+    const vehiculeIds = (demande.demande_vehicules ?? []).map((dv) => dv.vehicule_id);
+    if (vehiculeIds.length === 0) return;
+
+    supabase
+      .from("vehicules")
+      .select("id, vehicule, matricule, chauffeur_responsable, zone")
+      .in("id", vehiculeIds)
+      .then(({ data }) => {
+        const map: Record<number, VehiculeInfo> = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (data ?? []).forEach((v: any) => { map[v.id] = v as VehiculeInfo; });
+        setVehiculesMap(map);
+      });
+  }, [demande]);
 
   // Init ravForms when demande loads for responsable_station
   useEffect(() => {
@@ -323,6 +391,285 @@ export default function DetailDemandePage() {
   }
 
   // -------------------------------------------------------------------------
+  // Print — Situation
+  // -------------------------------------------------------------------------
+
+  function handlePrintSituation() {
+    if (!demande) return;
+    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut !== "en_attente");
+    if (items.length === 0) {
+      alert("Aucun ravitaillement saisi à imprimer.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=900,height=1200");
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenêtre d'impression.");
+      return;
+    }
+
+    const logoUrl    = `${window.location.origin}/rimatel-logo.jpeg`;
+    const dept       = demande.departement;
+    const isCdpe     = dept.toUpperCase().includes("CDPE");
+    const today      = new Date().toLocaleDateString("fr-FR");
+    const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
+    const zoomLevel  = Math.min(100, Math.round(1400 / items.length)) + "%";
+    const tableFontSize = Math.min(11, Math.round(200 / items.length));
+    const totalMontant  = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
+
+    const rowsHtml = items
+      .map((dv, index) => {
+        const v = vehiculesMap[dv.vehicule_id];
+        return `
+          <tr>
+            <td style="text-align:center;">${index + 1}</td>
+            <td>${escapeHtml(v?.vehicule || "-")}<br/><small>${escapeHtml(v?.matricule || "-")}</small></td>
+            <td>${formatNumber(dv.montant ?? 0)}</td>
+            <td>${dateStr}</td>
+            <td>${escapeHtml(v?.chauffeur_responsable || "-")}<br/><small>Nom :</small></td>
+            <td>STATION</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const headerInfoHtml = isCdpe
+      ? `<p><strong>Direction Générale</strong></p>
+         <p>La Cellule de Pilotage de déploiement et des extensions</p>`
+      : `<p><strong>Direction Technique</strong></p>
+         <p>${escapeHtml(dept)}</p>`;
+
+    const signaturesHtml = isCdpe
+      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
+      : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Situation des Dépenses CARBURANT</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; zoom: ${zoomLevel}; }
+            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+            .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
+            .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
+            .doc-header-info p { margin: 2px 0; font-size: 14px; }
+            .doc-date { font-size: 14px; text-align: right; white-space: nowrap; }
+            .doc-title { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 11px; }
+            th { background: #1f2937; color: white; font-weight: 700; text-align: center; font-size: 12px; }
+            tfoot td { font-weight: 700; font-size: 13px; }
+            .signatures { display: flex; gap: 12px; margin-top: 48px; }
+            .sig-block { flex: 1; text-align: center; }
+            .sig-title { font-weight: 700; font-size: 13px; margin: 0 0 6px; text-transform: uppercase; }
+            .sig-space { height: 60px; }
+            @media print {
+              @page { margin: 0; size: A4 landscape; }
+              body { zoom: ${zoomLevel}; }
+              table { font-size: ${tableFontSize}px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="doc-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="doc-header-info">${headerInfoHtml}</div>
+            <div class="doc-date">Date : ${today}</div>
+          </div>
+          <div class="doc-title">Situation des dépenses carburant</div>
+          <table>
+            <thead>
+              <tr>
+                <th>N°</th>
+                <th>Description</th>
+                <th>Montant</th>
+                <th>Date/Période</th>
+                <th>Responsable</th>
+                <th>Bénéficiaire</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2" style="text-align:right;font-weight:700;">Total</td>
+                <td style="font-weight:700;">${formatNumber(totalMontant)}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="signatures">${signaturesHtml}</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
+  // -------------------------------------------------------------------------
+  // Print — Bons
+  // -------------------------------------------------------------------------
+
+  function handlePrintBon() {
+    if (!demande) return;
+    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut !== "en_attente");
+    if (items.length === 0) {
+      alert("Aucun ravitaillement saisi à imprimer.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=900,height=1200");
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenêtre d'impression.");
+      return;
+    }
+
+    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
+    const dept    = demande.departement;
+
+    function bonHtml(dv: DemandeVehicule, num: number) {
+      const v          = vehiculesMap[dv.vehicule_id];
+      const itemZone   = v?.zone ?? dept;
+      const itemIsCdpe = itemZone.toUpperCase().includes("CDPE");
+      const bonHeaderInfo = itemIsCdpe
+        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
+        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
+      return `
+        <div class="bon">
+          <div class="bon-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="bon-header-info">${bonHeaderInfo}</div>
+          </div>
+          <div class="bon-frame">
+            <div class="dotted-line"></div>
+            <div class="bon-title">BON DE CARBURANT N° : ${num}</div>
+            <div class="dotted-line"></div>
+            <div class="bon-fields">
+              <div class="field-row">
+                <span class="field-label">Date :</span>
+                <span class="field-value">${dateStr}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Matricule du véhicule :</span>
+                <span class="field-value">${escapeHtml(v?.matricule || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Type de Voiture :</span>
+                <span class="field-value">${escapeHtml(v?.vehicule || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Nom du conducteur :</span>
+                <span class="field-value">${escapeHtml(v?.chauffeur_responsable || "")}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Quantité de carburant (Litres) :</span>
+                <span class="field-value">${formatNumber(dv.n_liter ?? 0)}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Montant :</span>
+                <span class="field-value">${formatNumber(dv.montant ?? 0)} MRU</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Montant en lettres :</span>
+                <span class="field-value">${escapeHtml(numberToWordsFr(dv.montant ?? 0))}</span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Station-service :</span>
+                <span class="field-value"></span>
+              </div>
+              <div class="field-row">
+                <span class="field-label">Signature du responsable Station :</span>
+                <span class="field-value"></span>
+              </div>
+            </div>
+            <div class="bon-signatures">
+              <div class="bon-sig">
+                <p class="bon-sig-title">Signature Chef Département</p>
+                <div class="bon-sig-space"></div>
+              </div>
+              <div class="bon-sig">
+                <p class="bon-sig-title">VISA Directeur Général</p>
+                <div class="bon-sig-space"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const emptyBon = `<div class="bon"></div>`;
+    const sorted   = [...items].sort((a, b) =>
+      (vehiculesMap[a.vehicule_id]?.zone ?? "").localeCompare(
+        vehiculesMap[b.vehicule_id]?.zone ?? "", "fr"
+      )
+    );
+
+    const pages: string[] = [];
+    for (let i = 0; i < sorted.length; i += 2) {
+      const first  = sorted[i];
+      const second = sorted[i + 1];
+      const isLast = i + 2 >= sorted.length;
+      pages.push(`
+        <div class="page${isLast ? "" : " page-break"}">
+          ${bonHtml(first, i + 1)}
+          <div class="separator"></div>
+          ${second ? bonHtml(second, i + 2) : emptyBon}
+        </div>
+      `);
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Bons de Carburant</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 0; }
+            .page { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
+            .page-break { page-break-after: always; }
+            .bon { height: 148.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
+            .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
+            .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+            .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
+            .bon-header-info p { margin: 2px 0; font-size: 16px; }
+            .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+            .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }
+            .bon-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 0; }
+            .bon-fields { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+            .field-row { display: flex; align-items: baseline; gap: 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
+            .field-label { white-space: nowrap; font-size: 14px; flex-shrink: 0; }
+            .field-value { font-size: 14px; flex: 1; }
+            .bon-signatures { display: flex; gap: 12px; margin-top: 12px; justify-content: space-around; }
+            .bon-sig { flex: 1; text-align: center; }
+            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
+            .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
+            @media print {
+              @page { margin: 0; size: A4 portrait; }
+            }
+          </style>
+        </head>
+        <body>${pages.join("")}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
+  // -------------------------------------------------------------------------
   // Loading / error states
   // -------------------------------------------------------------------------
 
@@ -423,7 +770,7 @@ export default function DetailDemandePage() {
           {isChefDept && demande.statut === "validee_cellule" && (
             <>
               <button
-                onClick={() => window.print()}
+                onClick={handlePrintSituation}
                 className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -432,7 +779,7 @@ export default function DetailDemandePage() {
                 Imprimer situation
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={handlePrintBon}
                 className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -467,7 +814,7 @@ export default function DetailDemandePage() {
             isStation={isStation}
             isCellule={isCellule}
             isChefDept={isChefDept}
-            vehiculeInfo={vehiculeInfoMap[dv.vehicule_id]}
+            vehiculeInfo={vehiculesMap[dv.vehicule_id]}
             photos={photosMap[dv.id]}
             ravForm={ravForms[dv.id]}
             processing={processing}
@@ -551,7 +898,7 @@ function VehiculeCard({
         </div>
       )}
 
-      {/* Photos (cellule only — fetched when status ≥ validee_station) */}
+      {/* Photos (cellule only) */}
       {showPhotos && (
         <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -699,7 +1046,7 @@ function PhotoInput({
   file: File | null;
   onChange: (f: File | null) => void;
 }) {
-  const label = PHOTO_LABELS[type];
+  const label      = PHOTO_LABELS[type];
   const previewUrl = file ? URL.createObjectURL(file) : null;
 
   return (
