@@ -76,6 +76,7 @@ export interface Vehicule {
   utilisationAffectation: string;
   chauffeurResponsable?: string | null;
   zone: string;
+  centre?: string | null;
 }
 
 export interface RavitaillementVehicule {

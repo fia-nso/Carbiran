@@ -12,6 +12,7 @@ interface VehiculeFormState {
   chauffeurResponsable: string;
   zone: string;
   zoneAutre: string;
+  centre: string;
 }
 
 const ZONES_FIXES = ["Zone A", "Zone B", "RS", "FO", "CDPE"] as const;
@@ -23,6 +24,7 @@ const initialFormState: VehiculeFormState = {
   chauffeurResponsable: "",
   zone: "Zone A",
   zoneAutre: "",
+  centre: "",
 };
 
 export default function VehiculePage() {
@@ -32,6 +34,9 @@ export default function VehiculePage() {
     loading,
     search,
     setSearch,
+    centreFilter,
+    setCentreFilter,
+    centresDisponibles,
     addVehicule,
     updateVehicule,
     deleteVehicule,
@@ -64,6 +69,7 @@ export default function VehiculePage() {
       chauffeurResponsable: item.chauffeurResponsable || "",
       zone: isKnownZone ? item.zone : "Autre",
       zoneAutre: isKnownZone ? "" : item.zone,
+      centre: item.centre || "",
     });
     setIsModalOpen(true);
   }
@@ -82,6 +88,7 @@ export default function VehiculePage() {
       utilisationAffectation: form.utilisationAffectation.trim(),
       chauffeurResponsable: form.chauffeurResponsable.trim(),
       zone: zoneValue,
+      centre: form.centre.trim() || null,
     };
 
     if (!payload.vehicule || !payload.matricule || !payload.utilisationAffectation || !payload.zone) {
@@ -162,6 +169,17 @@ export default function VehiculePage() {
                 />
               </div>
 
+              <select
+                value={centreFilter}
+                onChange={(event) => setCentreFilter(event.target.value)}
+                className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white shadow-sm text-gray-700"
+              >
+                <option value="">Tous les centres</option>
+                {centresDisponibles.map((centre) => (
+                  <option key={centre} value={centre}>{centre}</option>
+                ))}
+              </select>
+
               {!isViewer && (
                 <button
                   onClick={openAddModal}
@@ -212,6 +230,9 @@ export default function VehiculePage() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Zone
                   </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
+                    Centre
+                  </th>
                   {!isViewer && (
                     <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
                       Actions
@@ -222,7 +243,7 @@ export default function VehiculePage() {
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={isViewer ? 5 : 6} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                         <span className="ml-3 text-gray-600">Chargement des vehicules...</span>
@@ -231,7 +252,7 @@ export default function VehiculePage() {
                   </tr>
                 ) : vehicules.length === 0 ? (
                   <tr>
-                    <td colSpan={isViewer ? 5 : 6} className="px-6 py-12 text-center">
+                    <td colSpan={isViewer ? 6 : 7} className="px-6 py-12 text-center">
                       <div className="text-center">
                         <h3 className="text-lg font-medium text-gray-900">Aucun vehicule</h3>
                         <p className="mt-1 text-gray-500">
@@ -264,6 +285,7 @@ export default function VehiculePage() {
                           {item.zone}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-gray-700">{item.centre || "-"}</td>
                       {!isViewer && (
                         <td className="px-6 py-4">
                           <div className="flex justify-center gap-2">
@@ -381,6 +403,20 @@ export default function VehiculePage() {
                   placeholder="Précisez la zone..."
                 />
               )}
+            </div>
+
+            <div>
+              <label htmlFor="vehicule-centre" className="block text-sm font-medium text-gray-700 mb-2">
+                Centre
+              </label>
+              <input
+                id="vehicule-centre"
+                type="text"
+                value={form.centre}
+                onChange={(event) => updateForm("centre", event.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                placeholder="Optionnel"
+              />
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

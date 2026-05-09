@@ -10,6 +10,7 @@ interface VehiculeRow {
   utilisation_affectation: string;
   chauffeur_responsable?: string | null;
   zone: string;
+  centre?: string | null;
 }
 
 interface VehiculePayload {
@@ -18,6 +19,7 @@ interface VehiculePayload {
   utilisationAffectation: string;
   chauffeurResponsable?: string | null;
   zone: string;
+  centre?: string | null;
 }
 
 function mapVehiculeRow(row: VehiculeRow): Vehicule {
@@ -28,6 +30,7 @@ function mapVehiculeRow(row: VehiculeRow): Vehicule {
     utilisationAffectation: row.utilisation_affectation,
     chauffeurResponsable: row.chauffeur_responsable,
     zone: row.zone,
+    centre: row.centre,
   };
 }
 
@@ -38,6 +41,7 @@ function buildVehiculeInsert(payload: VehiculePayload) {
     utilisation_affectation: payload.utilisationAffectation,
     chauffeur_responsable: payload.chauffeurResponsable || null,
     zone: payload.zone,
+    centre: payload.centre || null,
   };
 }
 
@@ -45,6 +49,7 @@ export function useVehicules() {
   const [vehicules, setVehicules] = useState<Vehicule[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
+  const [centreFilter, setCentreFilter] = useState<string>("");
 
   useEffect(() => {
     void loadVehicules().catch(() => undefined);
@@ -55,7 +60,7 @@ export function useVehicules() {
     try {
       const { data, error } = await supabase
         .from("vehicules")
-        .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone")
+        .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre")
         .order("id", { ascending: false });
 
       if (error) {
@@ -75,7 +80,7 @@ export function useVehicules() {
     const { data, error } = await supabase
       .from("vehicules")
       .insert([buildVehiculeInsert(payload)])
-      .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone")
+      .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre")
       .single();
 
     if (error) {
@@ -101,7 +106,7 @@ export function useVehicules() {
       .from("vehicules")
       .update(buildVehiculeInsert(payload))
       .eq("id", payload.id)
-      .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone")
+      .select("id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre")
       .single();
 
     if (error) {
@@ -148,18 +153,23 @@ export function useVehicules() {
 
   const normalizedSearch = search.trim().toLowerCase();
 
-  const vehiculesFiltres = vehicules.filter((item) => {
-    if (!normalizedSearch) {
-      return true;
-    }
+  const centresDisponibles = Array.from(
+    new Set(vehicules.map((v) => v.centre).filter((c): c is string => Boolean(c)))
+  ).sort();
 
-    return [
+  const vehiculesFiltres = vehicules.filter((item) => {
+    const matchSearch = !normalizedSearch || [
       item.vehicule,
       item.matricule,
       item.utilisationAffectation,
       item.chauffeurResponsable || "",
       item.zone,
+      item.centre || "",
     ].some((value) => value.toLowerCase().includes(normalizedSearch));
+
+    const matchCentre = !centreFilter || item.centre === centreFilter;
+
+    return matchSearch && matchCentre;
   });
 
   return {
@@ -167,6 +177,9 @@ export function useVehicules() {
     loading,
     search,
     setSearch,
+    centreFilter,
+    setCentreFilter,
+    centresDisponibles,
     addVehicule,
     updateVehicule,
     deleteVehicule,
