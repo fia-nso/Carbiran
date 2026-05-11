@@ -4,6 +4,7 @@ import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { uploadPhoto } from "@/lib/uploadPhoto";
+import { notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -194,8 +195,6 @@ export default function DetailDemandePage() {
     validerDemandeDept,
     annulerDemande,
     saisirRavitaillement,
-    validerDemandeStation,
-    validerDemandeCellule,
   } = useDemandes();
 
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
@@ -206,6 +205,7 @@ export default function DetailDemandePage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
+  const [successMap, setSuccessMap] = useState<Record<string, string>>({});
 
   const isChefDept = user?.role === "chef_departement";
   const isStation  = user?.role === "responsable_station";
@@ -231,7 +231,7 @@ export default function DetailDemandePage() {
       setDemande(mapped);
 
       const dvIds      = (mapped.demande_vehicules ?? []).map((dv) => dv.id);
-      const needPhotos = ["validee_station", "validee_cellule"].includes(mapped.statut);
+      const needPhotos = (mapped.demande_vehicules ?? []).some((dv) => dv.statut !== "en_attente");
 
       if (needPhotos && dvIds.length > 0) {
         const { data: pData } = await supabase
@@ -295,10 +295,6 @@ export default function DetailDemandePage() {
   // Derived state
   // -------------------------------------------------------------------------
 
-  const allRavitaille =
-    (demande?.demande_vehicules?.length ?? 0) > 0 &&
-    demande?.demande_vehicules?.every((dv) => dv.statut !== "en_attente");
-
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
@@ -325,35 +321,13 @@ export default function DetailDemandePage() {
     }
   }
 
-  async function handleValiderStation() {
-    if (!demande) return;
-    setProcessing("valider_station");
-    try {
-      await validerDemandeStation(id!, demande.departement);
-      await fetchDemande();
-    } finally {
-      setProcessing(null);
-    }
-  }
-
-  async function handleValiderCellule() {
-    if (!demande) return;
-    setProcessing("valider_cellule");
-    try {
-      await validerDemandeCellule(id!, demande.departement);
-      await fetchDemande();
-    } finally {
-      setProcessing(null);
-    }
-  }
-
-  async function handleSaisirRavitaillement(dvId: string) {
-    const form = ravForms[dvId];
+  async function handleEnvoyerRavitaillement(dv: DemandeVehicule) {
+    const form = ravForms[dv.id];
     if (!form) return;
-    setProcessing(`rav_${dvId}`);
+    setProcessing(`rav_${dv.id}`);
     setSubmitError(null);
     try {
-      await saisirRavitaillement(dvId, {
+      await saisirRavitaillement(dv.id, {
         montant:     form.montant     ? parseFloat(form.montant)     : undefined,
         n_liter:     form.n_liter     ? parseFloat(form.n_liter)     : undefined,
         kilometrage: form.kilometrage ? parseFloat(form.kilometrage) : undefined,
@@ -364,13 +338,83 @@ export default function DetailDemandePage() {
 
       if (photoEntries.length > 0) {
         await Promise.all(
-          photoEntries.map(([type, file]) => uploadPhoto(file, dvId, type))
+          photoEntries.map(([type, file]) => uploadPhoto(file, dv.id, type))
         );
       }
 
+      const vehiculeInfo = vehiculesMap[dv.vehicule_id];
+      const montantVal   = parseFloat(form.montant);
+      const notifMsg     = `Nouveau ravitaillement à vérifier : ${vehiculeInfo?.matricule ?? `#${dv.vehicule_id}`} - ${montantVal.toLocaleString("fr-FR")} MRU`;
+      void Promise.all([
+        notifyByRole("Admin",   notifMsg, "ravitaillement_saisi", id),
+        notifyByRole("MENAGER", notifMsg, "ravitaillement_saisi", id),
+      ]);
+
+      setSuccessMap((prev) => ({ ...prev, [dv.id]: "Ravitaillement envoyé !" }));
       await fetchDemande();
     } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la saisie.");
+      setSubmitError(e instanceof Error ? e.message : "Erreur lors de l'envoi.");
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  async function handleValiderVehicule(dv: DemandeVehicule) {
+    if (!demande) return;
+    setProcessing(`valider_${dv.id}`);
+    setSubmitError(null);
+    try {
+      const { error: updateErr } = await supabase
+        .from("demande_vehicules")
+        .update({ statut: "valide" })
+        .eq("id", dv.id);
+      if (updateErr) throw updateErr;
+
+      const { error: insertErr } = await supabase
+        .from("ravitaillements_vehicules")
+        .insert({
+          vehicule_id:        dv.vehicule_id,
+          montant_ravitaille: dv.montant ?? 0,
+          n_liter:            dv.n_liter ?? 0,
+          kilometrage:        dv.kilometrage ?? 0,
+          date:               new Date().toISOString().split("T")[0],
+          commentaire:        `Validé via demande ${id}`,
+        });
+      if (insertErr) throw insertErr;
+
+      const vehiculeInfo = vehiculesMap[dv.vehicule_id];
+      void notifyByRoleAndDept(
+        "chef_departement",
+        demande.departement,
+        `Véhicule ${vehiculeInfo?.matricule ?? `#${dv.vehicule_id}`} validé — montant ${(dv.montant ?? 0).toLocaleString("fr-FR")} MRU`,
+        "vehicule_valide",
+        id
+      );
+
+      setSuccessMap((prev) => ({ ...prev, [dv.id]: "Véhicule validé et enregistré !" }));
+      await fetchDemande();
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la validation.");
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  async function handleRefuserVehicule(dv: DemandeVehicule) {
+    if (!window.confirm("Refuser le ravitaillement de ce véhicule ?")) return;
+    setProcessing(`refuser_${dv.id}`);
+    setSubmitError(null);
+    try {
+      const { error } = await supabase
+        .from("demande_vehicules")
+        .update({ statut: "refuse" })
+        .eq("id", dv.id);
+      if (error) throw error;
+
+      setSuccessMap((prev) => ({ ...prev, [dv.id]: "Véhicule refusé." }));
+      await fetchDemande();
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Erreur lors du refus.");
     } finally {
       setProcessing(null);
     }
@@ -396,9 +440,9 @@ export default function DetailDemandePage() {
 
   function handlePrintSituation() {
     if (!demande) return;
-    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut !== "en_attente");
+    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
     if (items.length === 0) {
-      alert("Aucun ravitaillement saisi à imprimer.");
+      alert("Aucun véhicule validé pour le moment.");
       return;
     }
 
@@ -522,9 +566,9 @@ export default function DetailDemandePage() {
 
   function handlePrintBon() {
     if (!demande) return;
-    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut !== "en_attente");
+    const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
     if (items.length === 0) {
-      alert("Aucun ravitaillement saisi à imprimer.");
+      alert("Aucun véhicule validé pour le moment.");
       return;
     }
 
@@ -747,27 +791,7 @@ export default function DetailDemandePage() {
             </>
           )}
 
-          {isStation && demande.statut === "validee_dept" && allRavitaille && (
-            <button
-              onClick={handleValiderStation}
-              disabled={processing === "valider_station"}
-              className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-            >
-              {processing === "valider_station" ? "Soumission…" : "Soumettre à la cellule"}
-            </button>
-          )}
-
-          {isCellule && demande.statut === "validee_station" && (
-            <button
-              onClick={handleValiderCellule}
-              disabled={processing === "valider_cellule"}
-              className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-            >
-              {processing === "valider_cellule" ? "Validation…" : "Valider la demande"}
-            </button>
-          )}
-
-          {isChefDept && demande.statut === "validee_cellule" && (
+          {isChefDept && (
             <>
               <button
                 onClick={handlePrintSituation}
@@ -818,9 +842,12 @@ export default function DetailDemandePage() {
             photos={photosMap[dv.id]}
             ravForm={ravForms[dv.id]}
             processing={processing}
+            successMessage={successMap[dv.id]}
             onUpdateForm={(patch) => updateRavForm(dv.id, patch)}
             onUpdatePhoto={(type, file) => updateRavPhoto(dv.id, type, file)}
-            onSubmit={() => handleSaisirRavitaillement(dv.id)}
+            onEnvoyer={() => handleEnvoyerRavitaillement(dv)}
+            onValider={() => handleValiderVehicule(dv)}
+            onRefuser={() => handleRefuserVehicule(dv)}
           />
         ))}
       </div>
@@ -844,9 +871,12 @@ interface VehiculeCardProps {
   photos?: PhotoJustification[];
   ravForm: RavForm | undefined;
   processing: string | null;
+  successMessage?: string;
   onUpdateForm: (patch: Partial<Omit<RavForm, "photos">>) => void;
   onUpdatePhoto: (type: TypePhoto, file: File | null) => void;
-  onSubmit: () => void;
+  onEnvoyer: () => void;
+  onValider: () => void;
+  onRefuser: () => void;
 }
 
 function VehiculeCard({
@@ -859,14 +889,26 @@ function VehiculeCard({
   photos,
   ravForm,
   processing,
+  successMessage,
   onUpdateForm,
   onUpdatePhoto,
-  onSubmit,
+  onEnvoyer,
+  onValider,
+  onRefuser,
 }: VehiculeCardProps) {
-  const showForm    = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts = (isCellule || isChefDept) && dv.statut !== "en_attente";
-  const showPhotos  = isCellule && (photos?.length ?? 0) > 0;
-  const isSaving    = processing === `rav_${dv.id}`;
+  const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
+  const showAmounts        = (isCellule || isChefDept) && dv.statut !== "en_attente";
+  const showPhotos         = isCellule && (photos?.length ?? 0) > 0;
+  const showCelluleActions = isCellule && dv.statut === "ravitaille";
+  const isSaving           = processing === `rav_${dv.id}`;
+  const isValidating       = processing === `valider_${dv.id}`;
+  const isRefusing         = processing === `refuser_${dv.id}`;
+
+  const canEnvoyer =
+    ravForm != null &&
+    !!ravForm.montant &&
+    !!ravForm.n_liter &&
+    Object.values(ravForm.photos).some(Boolean);
 
   const vehiculeLabel = vehiculeInfo
     ? `${vehiculeInfo.matricule} · ${vehiculeInfo.vehicule}`
@@ -888,6 +930,13 @@ function VehiculeCard({
         </div>
         <DvStatutBadge statut={dv.statut} />
       </div>
+
+      {/* Success message */}
+      {successMessage && (
+        <div className="px-6 py-3 bg-green-50 border-b border-green-100">
+          <p className="text-sm text-green-700 font-medium">{successMessage}</p>
+        </div>
+      )}
 
       {/* Amounts (cellule / chef after ravitaillement) */}
       {showAmounts && (dv.montant != null || dv.n_liter != null || dv.kilometrage != null) && (
@@ -935,6 +984,26 @@ function VehiculeCard({
         </div>
       )}
 
+      {/* Cellule — valider / refuser par véhicule */}
+      {showCelluleActions && (
+        <div className="px-6 py-4 flex gap-3 border-b border-gray-100">
+          <button
+            onClick={onValider}
+            disabled={isValidating || isRefusing}
+            className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+          >
+            {isValidating ? "Validation…" : "Valider ce véhicule"}
+          </button>
+          <button
+            onClick={onRefuser}
+            disabled={isValidating || isRefusing}
+            className="px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
+          >
+            {isRefusing ? "Refus…" : "Refuser ce véhicule"}
+          </button>
+        </div>
+      )}
+
       {/* Saisie form (responsable station) */}
       {showForm && ravForm && (
         <div className="px-6 py-5 space-y-5">
@@ -979,11 +1048,12 @@ function VehiculeCard({
 
           <div className="flex justify-end pt-2">
             <button
-              onClick={onSubmit}
-              disabled={isSaving}
-              className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+              onClick={onEnvoyer}
+              disabled={isSaving || !canEnvoyer}
+              title={!canEnvoyer ? "Saisissez le montant, les litres et au moins une photo" : undefined}
+              className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSaving ? "Enregistrement…" : "Valider ce véhicule"}
+              {isSaving ? "Envoi en cours…" : "Envoyer ce ravitaillement"}
             </button>
           </div>
         </div>

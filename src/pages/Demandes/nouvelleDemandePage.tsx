@@ -4,7 +4,7 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useVehicules } from "@/hooks/useVehicule";
 
-const DEPARTEMENTS = ["Zone A", "Zone B", "RS", "FO", "CDPE"] as const;
+const DEPARTEMENTS = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE"] as const;
 type Departement = typeof DEPARTEMENTS[number];
 
 export default function NouvelleDemandePage() {
@@ -31,8 +31,13 @@ export default function NouvelleDemandePage() {
   }, [departement]);
 
   const vehiculesDept = useMemo(
-    () => allVehicules.filter((v) => v.zone === departement),
-    [allVehicules, departement]
+    () =>
+      allVehicules.filter((v) => {
+        if (v.zone !== departement) return false;
+        if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
+        return true;
+      }),
+    [allVehicules, departement, user?.role]
   );
 
   const vehiculesFiltres = useMemo(

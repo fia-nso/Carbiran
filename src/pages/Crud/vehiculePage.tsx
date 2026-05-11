@@ -15,7 +15,7 @@ interface VehiculeFormState {
   centre: string;
 }
 
-const ZONES_FIXES = ["Zone A", "Zone B", "RS", "FO", "CDPE"] as const;
+const ZONES_FIXES = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE"] as const;
 
 const initialFormState: VehiculeFormState = {
   vehicule: "",
@@ -389,7 +389,7 @@ export default function VehiculePage() {
               >
                 <option value="Zone A">Département Zone A (Zone A)</option>
                 <option value="Zone B">Département Zone B (Zone B)</option>
-                <option value="RS">Département Réseaux et Systèmes (RS)</option>
+                <option value="RX&SYS">Département Réseaux et Systèmes (RX&SYS)</option>
                 <option value="FO">Département Fibre Optique (FO)</option>
                 <option value="CDPE">Cellule de Pilotage de Déploiement et des Extensions (CDPE)</option>
                 <option value="Autre">Autre</option>
