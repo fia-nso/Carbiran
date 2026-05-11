@@ -507,8 +507,6 @@ export default function RavitaillementVehiculePage() {
     const zone = allZones[0] ?? "—";
     const isCdpe = normalizeZone(zone).includes("cpde");
     const today = new Date().toLocaleDateString("fr-FR");
-    const zoomLevel = Math.min(100, Math.round(1400 / selectedRavitaillements.length)) + "%";
-    const tableFontSize = Math.min(11, Math.round(200 / selectedRavitaillements.length));
     const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
 
     const rowsHtml = selectedRavitaillements
@@ -550,57 +548,83 @@ export default function RavitaillementVehiculePage() {
           <meta charset="utf-8" />
           <title>Situation des Dépenses CARBURANT</title>
           <style>
-            * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; zoom: ${zoomLevel}; }
-            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
-            .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
-            .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
-            .doc-header-info p { margin: 2px 0; font-size: 14px; }
-            .doc-date { font-size: 14px; text-align: right; white-space: nowrap; }
-            .doc-title { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 11px; }
-            th { background: #1f2937; color: white; font-weight: 700; text-align: center; font-size: 12px; }
-            tfoot td { font-weight: 700; font-size: 13px; }
-            .signatures { display: flex; gap: 12px; margin-top: 48px; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            /* En-tête du document dans thead */
+            .doc-header-row td { border: none; padding-bottom: 6px; }
+            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 4px; }
+            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
+            .doc-header-info p { margin: 2px 0; font-size: 13px; }
+            .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
+            .doc-title-row td { border: none; text-align: center; font-size: 15px; font-weight: 700;
+                                text-transform: uppercase; letter-spacing: 0.04em;
+                                padding: 10px 0 12px; }
+            /* En-têtes colonnes */
+            .col-header-row th { background: #1f2937; color: white; font-weight: 700;
+                                  text-align: center; font-size: 11px;
+                                  border: 1px solid #374151; padding: 5px 4px; }
+            /* Lignes de données */
+            tbody tr td { border: 1px solid #374151; padding: 5px 4px;
+                           text-align: left; vertical-align: top; font-size: 11px; }
+            /* Ligne de total */
+            .total-row td { border: 1px solid #374151; padding: 5px 4px;
+                             font-size: 12px; font-weight: 700; }
+            /* Signatures dans tfoot */
+            .sig-row td { border: none; padding-top: 32px; }
+            .signatures { display: flex; gap: 12px; }
             .sig-block { flex: 1; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 13px; margin: 0 0 6px; text-transform: uppercase; }
-            .sig-space { height: 60px; }
+            .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
+            .sig-space { height: 56px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { margin: 0; size: A4 landscape; }
-              body { zoom: ${zoomLevel}; }
-              table { font-size: ${tableFontSize}px; }
+              @page { size: A4 landscape; margin: 10mm; }
+              body { zoom: 100%; font-size: 11px; }
+              thead { display: table-header-group; }
+              tfoot { display: table-footer-group; }
+              tr { page-break-inside: avoid; }
             }
           </style>
         </head>
         <body>
-          <div class="doc-header">
-            <img src="${logoUrl}" alt="Logo RIMATEL" />
-            <div class="doc-header-info">${headerInfoHtml}</div>
-            <div class="doc-date">Date : ${today}</div>
-          </div>
-          <div class="doc-title">Situation des dépenses carburant</div>
           <table>
             <thead>
-              <tr>
-                <th>N°</th>
-                <th>Description</th>
-                <th>Montant</th>
-                <th>Date/Période</th>
-                <th>Responsable</th>
-                <th>Bénéficiaire</th>
+              <tr class="doc-header-row">
+                <td colspan="6">
+                  <div class="doc-header">
+                    <img src="${logoUrl}" alt="Logo RIMATEL" />
+                    <div class="doc-header-info">${headerInfoHtml}</div>
+                    <div class="doc-date">Date : ${today}</div>
+                  </div>
+                </td>
+              </tr>
+              <tr class="doc-title-row">
+                <td colspan="6">Situation des dépenses carburant</td>
+              </tr>
+              <tr class="col-header-row">
+                <th style="width:5%;">N°</th>
+                <th style="width:28%;">Description</th>
+                <th style="width:15%;">Montant</th>
+                <th style="width:15%;">Date/Période</th>
+                <th style="width:22%;">Responsable</th>
+                <th style="width:15%;">Bénéficiaire</th>
               </tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
             <tfoot>
-              <tr>
-                <td colspan="2" style="text-align:right;font-weight:700;">Total</td>
-                <td style="font-weight:700;">${formatNumber(totalMontant)}</td>
-                <td colspan="3"></td>
+              <tr class="sig-row">
+                <td colspan="6">
+                  <div class="signatures">${signaturesHtml}</div>
+                </td>
               </tr>
             </tfoot>
+            <tbody>
+              ${rowsHtml}
+              <tr class="total-row">
+                <td colspan="2" style="text-align:right;">Total</td>
+                <td>${formatNumber(totalMontant)}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tbody>
           </table>
-          <div class="signatures">${signaturesHtml}</div>
         </body>
       </html>
     `);

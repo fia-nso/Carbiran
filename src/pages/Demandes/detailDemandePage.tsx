@@ -209,9 +209,10 @@ export default function DetailDemandePage() {
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
   const [successMap, setSuccessMap] = useState<Record<string, string>>({});
 
-  const isChefDept = user?.role === "chef_departement";
-  const isStation  = user?.role === "responsable_station";
-  const isCellule  = user?.role === "Admin" || user?.role === "MENAGER";
+  const isChefDept      = user?.role === "chef_departement";
+  const isStation       = user?.role === "responsable_station";
+  const isStationViewer = user?.role === "responsable_station_viewer";
+  const isCellule       = user?.role === "Admin" || user?.role === "MENAGER";
 
   // -------------------------------------------------------------------------
   // Fetch demande + photos
@@ -838,6 +839,7 @@ export default function DetailDemandePage() {
             dv={dv}
             demande={demande}
             isStation={isStation}
+            isStationViewer={isStationViewer}
             isCellule={isCellule}
             isChefDept={isChefDept}
             vehiculeInfo={vehiculesMap[dv.vehicule_id]}
@@ -867,6 +869,7 @@ interface VehiculeCardProps {
   dv: DemandeVehicule;
   demande: DemandeRavitaillement;
   isStation: boolean;
+  isStationViewer: boolean;
   isCellule: boolean;
   isChefDept: boolean;
   vehiculeInfo?: VehiculeInfo;
@@ -885,6 +888,7 @@ function VehiculeCard({
   dv,
   demande,
   isStation,
+  isStationViewer,
   isCellule,
   isChefDept,
   vehiculeInfo,
@@ -899,8 +903,8 @@ function VehiculeCard({
   onRefuser,
 }: VehiculeCardProps) {
   const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts        = (isCellule || isChefDept) && dv.statut !== "en_attente";
-  const showPhotos         = isCellule && (photos?.length ?? 0) > 0;
+  const showAmounts        = (isCellule || isChefDept || isStationViewer) && dv.statut !== "en_attente";
+  const showPhotos         = (isCellule || isStationViewer) && (photos?.length ?? 0) > 0;
   const showCelluleActions = isCellule && dv.statut === "ravitaille";
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
