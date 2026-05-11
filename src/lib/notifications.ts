@@ -64,3 +64,15 @@ export async function notifyByRoleAndDept(
   const ids = await fetchUserIdsByRoleAndDept(role, dept);
   await Promise.all(ids.map((id) => createNotification(id, message, type, demandeId)));
 }
+
+// Diffusion vers plusieurs rôles simultanément (déduplique les destinataires)
+export async function notifyByRoles(
+  roles: string[],
+  message: string,
+  type: string,
+  demandeId?: string
+): Promise<void> {
+  const idArrays = await Promise.all(roles.map(fetchUserIdsByRole));
+  const allIds = [...new Set(idArrays.flat())];
+  await Promise.all(allIds.map((id) => createNotification(id, message, type, demandeId)));
+}

@@ -57,19 +57,22 @@ export default function NouvelleDemandePage() {
   const vehiculesDept = useMemo(
     () =>
       allVehicules.filter((v) => {
+        if (isChefDept) {
+          // Zone doit correspondre exactement au département de l'utilisateur + centre NKTT
+          if (!user?.departement) return false;
+          if (normalizeZone(v.zone) !== normalizeZone(user.departement)) return false;
+          if (v.centre !== "NKTT") return false;
+          return true;
+        }
         const zoneMatch =
           departement === "Autre"
             ? !KNOWN_ZONES.includes(normalizeZone(v.zone))
             : normalizeZone(v.zone) === normalizeZone(departement);
         if (!zoneMatch) return false;
-        if (
-          (user?.role === "chef_de_cours" || user?.role === "chef_departement") &&
-          v.centre !== "NKTT"
-        )
-          return false;
+        if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
         return true;
       }),
-    [allVehicules, departement, user?.role]
+    [allVehicules, departement, isChefDept, user?.role, user?.departement]
   );
 
   const vehiculesFiltres = useMemo(
@@ -120,7 +123,7 @@ export default function NouvelleDemandePage() {
     setError(null);
     setSubmitting(true);
     try {
-      await createDemande(departement, [...selected]);
+      await createDemande(departement, [...selected], user?.role);
       navigate("/demandes");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création.");

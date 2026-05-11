@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/supabaseClient";
-import { notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
+import { notifyByRole, notifyByRoleAndDept, notifyByRoles } from "@/lib/notifications";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -139,14 +139,17 @@ export function useDemandes() {
   // -------------------------------------------------------------------------
 
   const createDemande = useCallback(
-    async (departement: string, vehiculeIds: number[]) => {
+    async (departement: string, vehiculeIds: number[], role?: string) => {
       const { data: session } = await supabase.auth.getUser();
       const userId = session.user?.id;
       if (!userId) throw new Error("Utilisateur non connecté.");
 
+      const isChefDept = role === "chef_departement";
+      const statutInitial = isChefDept ? "validee_dept" : "en_attente";
+
       const { data: demande, error: demandeErr } = await supabase
         .from("demandes_ravitaillement")
-        .insert({ departement, statut: "en_attente", created_by: userId })
+        .insert({ departement, statut: statutInitial, created_by: userId })
         .select("id")
         .single();
 
@@ -164,14 +167,24 @@ export function useDemandes() {
 
       if (dvErr) throw dvErr;
 
-      // Notifier le(s) chef(s) du département concerné
-      void notifyByRoleAndDept(
-        "chef_departement",
-        departement,
-        `Nouvelle demande de ravitaillement — ${departement} (${vehiculeIds.length} véhicule(s)).`,
-        "nouvelle_demande",
-        demande.id
-      );
+      if (isChefDept) {
+        // Demande directement validée — notifier les stations
+        void notifyByRoles(
+          ["responsable_station", "responsable_station_viewer"],
+          `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`,
+          "validation_dept",
+          demande.id
+        );
+      } else {
+        // Demande en attente — notifier le chef du département
+        void notifyByRoleAndDept(
+          "chef_departement",
+          departement,
+          `Nouvelle demande de ravitaillement — ${departement} (${vehiculeIds.length} véhicule(s)).`,
+          "nouvelle_demande",
+          demande.id
+        );
+      }
 
       await fetchDemandes();
       return demande.id as string;
@@ -193,9 +206,9 @@ export function useDemandes() {
 
       if (err) throw err;
 
-      void notifyByRole(
-        "responsable_station",
-        `Une demande${departement ? ` — ${departement}` : ""} est prête pour ravitaillement.`,
+      void notifyByRoles(
+        ["responsable_station", "responsable_station_viewer"],
+        `Demande approuvée pour ${departement ?? "un département"} — ravitaillement à effectuer`,
         "validation_dept",
         demandeId
       );
