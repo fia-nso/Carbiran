@@ -314,37 +314,53 @@ export function useDemandes() {
 
   const updateDemandeVehicules = useCallback(
     async (demandeId: string, vehiculeIds: number[]) => {
-      // Fetch existing vehicle row IDs so we can cascade-delete their photos
-      const { data: existingDvs } = await supabase
+      // ── Étape 1 : récupérer les IDs existants ──────────────────────────────
+      const { data: existingDvs, error: fetchErr } = await supabase
         .from("demande_vehicules")
         .select("id")
         .eq("demande_id", demandeId);
 
+      if (fetchErr) throw fetchErr;
+
+      console.log(
+        `[updateDemandeVehicules] ${existingDvs?.length ?? 0} véhicule(s) existant(s) pour demande ${demandeId}`
+      );
+
+      // ── Étape 2 : supprimer les photos liées ──────────────────────────────
       if (existingDvs && existingDvs.length > 0) {
         const dvIds = existingDvs.map((r: { id: string }) => r.id);
-        await supabase
+        const { error: photoErr } = await supabase
           .from("photos_justification")
           .delete()
           .in("demande_vehicule_id", dvIds);
+        if (photoErr) console.error("[updateDemandeVehicules] erreur suppression photos:", photoErr.message);
       }
 
-      const { error: deleteErr } = await supabase
+      // ── Étape 3 + 4 : supprimer tous les demande_vehicules, attendre ──────
+      const { error: deleteErr, count: deletedCount } = await supabase
         .from("demande_vehicules")
-        .delete()
+        .delete({ count: "exact" })
         .eq("demande_id", demandeId);
+
+      console.log(`[updateDemandeVehicules] suppression: ${deletedCount ?? "?"} ligne(s) supprimée(s), erreur: ${deleteErr?.message ?? "aucune"}`);
+
       if (deleteErr) throw deleteErr;
 
-      // Insert ONLY the new selection (empty array → no insert)
+      // ── Étape 5 : insérer les nouveaux véhicules ──────────────────────────
       if (vehiculeIds.length > 0) {
         const rows = vehiculeIds.map((vehicule_id) => ({
           demande_id: demandeId,
           vehicule_id,
           statut: "en_attente",
         }));
-        const { error: insertErr } = await supabase
+        const { data: inserted, error: insertErr } = await supabase
           .from("demande_vehicules")
-          .insert(rows);
+          .insert(rows)
+          .select("id");
         if (insertErr) throw insertErr;
+        console.log(`[updateDemandeVehicules] ${inserted?.length ?? 0} nouveau(x) véhicule(s) insérés`);
+      } else {
+        console.log("[updateDemandeVehicules] aucun véhicule à insérer");
       }
 
       await fetchDemandes();
