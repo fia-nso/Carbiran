@@ -42,12 +42,17 @@ export default function NouvelleDemandePage() {
     }
   }, [user, navigate]);
 
-  // Pour chef_departement : verrouille le département sur user.departement
+  // Pour chef_departement : verrouille le département sur user.departement dès que disponible
   useEffect(() => {
-    if (isChefDept && user?.departement) {
+    if (user?.role === "chef_departement" && user.departement) {
       setDepartement(matchDept(user.departement));
     }
-  }, [isChefDept, user?.departement]);
+  }, [user?.role, user?.departement]);
+
+  // Département effectif : pour chef_departement, toujours dérivé directement de user.departement
+  // pour éviter tout problème de timing avec l'état (pas de flash "Zone A")
+  const effectiveDepartement: Departement =
+    isChefDept && user?.departement ? matchDept(user.departement) : departement;
 
   useEffect(() => {
     setSelected(new Set());
@@ -123,7 +128,7 @@ export default function NouvelleDemandePage() {
     setError(null);
     setSubmitting(true);
     try {
-      await createDemande(departement, [...selected], user?.role);
+      await createDemande(effectiveDepartement, [...selected], user?.role);
       navigate("/demandes");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création.");
@@ -162,7 +167,7 @@ export default function NouvelleDemandePage() {
             </span>
             <div>
               <p className="text-xs text-teal-600 font-medium">Département</p>
-              <p className="text-sm font-semibold text-teal-900">{DEPT_LABELS[departement] ?? departement}</p>
+              <p className="text-sm font-semibold text-teal-900">{DEPT_LABELS[effectiveDepartement] ?? effectiveDepartement}</p>
             </div>
           </div>
         ) : (
@@ -191,7 +196,7 @@ export default function NouvelleDemandePage() {
         <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div>
-              <p className="text-sm font-semibold text-gray-700">Véhicules — {departement}</p>
+              <p className="text-sm font-semibold text-gray-700">Véhicules — {effectiveDepartement}</p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {selected.size} sélectionné(s)
               </p>
