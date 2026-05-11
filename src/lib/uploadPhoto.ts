@@ -17,11 +17,13 @@ export async function uploadPhoto(
     .from('ravitaillement-photos')
     .getPublicUrl(fileName)
 
-  await supabase.from('photos_justification').insert({
+  const { error: dbError } = await supabase.from('photos_justification').insert({
     demande_vehicule_id: demandeVehiculeId,
     url: data.publicUrl,
     type
   })
+
+  if (dbError) throw dbError
 
   return data.publicUrl
 }

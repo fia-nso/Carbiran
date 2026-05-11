@@ -9,6 +9,16 @@ const NAV_LINK =
 const MOBILE_NAV_LINK =
   "flex items-center px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/15 transition-colors font-medium text-white text-base";
 
+function getRoleLabel(role: string, departement?: string | null): string {
+  if (role === "Admin" || role === "MENAGER")            return "Cellule CSÉ";
+  if (role === "chef_de_cours")                          return "Responsable Parc";
+  if (role === "responsable_station")                    return "Superviseur/Station";
+  if (role === "responsable_station_viewer")             return "Chef Département Achat";
+  if (role === "chef_departement")
+    return departement ? `Chef Département ${departement}` : "Chef Département";
+  return role;
+}
+
 export default function Header() {
   const { logout, user } = useAuthContext();
   const navigate = useNavigate();
@@ -17,6 +27,7 @@ export default function Header() {
   const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
   const isAdmin          = user?.role === "Admin";
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
+  const roleLabel        = user ? getRoleLabel(user.role, user.departement) : "";
 
   const handleLogout = async () => {
     try {
@@ -54,7 +65,7 @@ export default function Header() {
                     </>
                   )}
                   <Link to="/demandes" className={NAV_LINK}>Demandes</Link>
-                  <Link to="/chpass"   className={NAV_LINK}>Securite</Link>
+                  <Link to="/chpass"   className={NAV_LINK}>Changer mot de passe</Link>
                 </>
               ) : (
                 <>
@@ -62,6 +73,7 @@ export default function Header() {
                   {canCreateDemande && (
                     <Link to="/demandes/nouvelle" className={NAV_LINK}>Nouvelle demande</Link>
                   )}
+                  <Link to="/chpass" className={NAV_LINK}>Changer mot de passe</Link>
                 </>
               )}
             </nav>
@@ -70,9 +82,16 @@ export default function Header() {
 
             <div className="h-8 w-px bg-white/20 mx-1" />
 
+            {/* User info */}
+            {user && (
+              <div className="text-right hidden xl:block min-w-0 max-w-[220px]">
+                <p className="text-xs font-semibold text-teal-100 leading-tight truncate">{roleLabel}</p>
+              </div>
+            )}
+
             <button
               onClick={handleLogout}
-              className="bg-gradient-to-r from-green-700 to-teal-800 hover:from-green-600 hover:to-teal-700 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-200 shadow-lg border border-white/10 flex items-center space-x-2 text-sm"
+              className="bg-gradient-to-r from-green-700 to-teal-800 hover:from-green-600 hover:to-teal-700 text-white font-semibold px-4 py-2 rounded-lg transition-all duration-200 shadow-lg border border-white/10 flex items-center space-x-2 text-sm flex-shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -109,6 +128,13 @@ export default function Header() {
       {/* Mobile menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-white/10 bg-gradient-to-b from-green-700 to-teal-800 px-4 py-2 space-y-0.5">
+          {/* User info */}
+          {user && (
+            <div className="px-4 py-3 border-b border-white/10 mb-1">
+              <p className="text-sm font-semibold text-teal-100">{roleLabel}</p>
+            </div>
+          )}
+
           {isAdminOrManager ? (
             <>
               <Link to="/dashboard"       className={MOBILE_NAV_LINK} onClick={closeMenu}>Dashboard</Link>
@@ -121,7 +147,7 @@ export default function Header() {
                 </>
               )}
               <Link to="/demandes" className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
-              <Link to="/chpass"   className={MOBILE_NAV_LINK} onClick={closeMenu}>Securite</Link>
+              <Link to="/chpass"   className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
           ) : (
             <>
@@ -129,6 +155,7 @@ export default function Header() {
               {canCreateDemande && (
                 <Link to="/demandes/nouvelle" className={MOBILE_NAV_LINK} onClick={closeMenu}>Nouvelle demande</Link>
               )}
+              <Link to="/chpass" className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
           )}
           <div className="pt-2 border-t border-white/10">

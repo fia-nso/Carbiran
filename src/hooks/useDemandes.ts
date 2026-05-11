@@ -309,6 +309,89 @@ export function useDemandes() {
   );
 
   // -------------------------------------------------------------------------
+  // updateDemandeVehicules — modifier les véhicules d'une demande existante
+  // -------------------------------------------------------------------------
+
+  const updateDemandeVehicules = useCallback(
+    async (demandeId: string, vehiculeIds: number[]) => {
+      // Fetch existing vehicle row IDs so we can cascade-delete their photos
+      const { data: existingDvs } = await supabase
+        .from("demande_vehicules")
+        .select("id")
+        .eq("demande_id", demandeId);
+
+      if (existingDvs && existingDvs.length > 0) {
+        const dvIds = existingDvs.map((r: { id: string }) => r.id);
+        await supabase
+          .from("photos_justification")
+          .delete()
+          .in("demande_vehicule_id", dvIds);
+      }
+
+      const { error: deleteErr } = await supabase
+        .from("demande_vehicules")
+        .delete()
+        .eq("demande_id", demandeId);
+      if (deleteErr) throw deleteErr;
+
+      const rows = vehiculeIds.map((vehicule_id) => ({
+        demande_id: demandeId,
+        vehicule_id,
+        statut: "en_attente",
+      }));
+      const { error: insertErr } = await supabase
+        .from("demande_vehicules")
+        .insert(rows);
+      if (insertErr) throw insertErr;
+
+      await fetchDemandes();
+    },
+    [fetchDemandes]
+  );
+
+  // -------------------------------------------------------------------------
+  // retournerRavitaillement — remettre un véhicule en_attente + notif station
+  // -------------------------------------------------------------------------
+
+  const retournerRavitaillement = useCallback(
+    async (demandeVehiculeId: string, demandeId: string, matricule?: string) => {
+      // Only reset if vehicle is still in "ravitaille" state (guard against double-call)
+      const { error: updateErr } = await supabase
+        .from("demande_vehicules")
+        .update({ statut: "en_attente", montant: null, n_liter: null, kilometrage: null })
+        .eq("id", demandeVehiculeId)
+        .eq("statut", "ravitaille");
+      if (updateErr) throw updateErr;
+
+      // Delete photos so station can re-upload corrected ones
+      const { error: photoErr } = await supabase
+        .from("photos_justification")
+        .delete()
+        .eq("demande_vehicule_id", demandeVehiculeId);
+      if (photoErr) console.error("retournerRavitaillement photo delete:", photoErr.message);
+
+      // If demande was already submitted to cellule (validee_station), revert it so
+      // the station can re-do the vehicle and re-submit via validerDemandeStation
+      await supabase
+        .from("demandes_ravitaillement")
+        .update({ statut: "validee_dept" })
+        .eq("id", demandeId)
+        .eq("statut", "validee_station");
+
+      const msg = `Ravitaillement retourné pour correction${matricule ? ` : ${matricule}` : ""}`;
+      void notifyByRoles(
+        ["responsable_station", "responsable_station_viewer"],
+        msg,
+        "retour_station",
+        demandeId
+      );
+
+      await fetchDemandes();
+    },
+    [fetchDemandes]
+  );
+
+  // -------------------------------------------------------------------------
   // fetchNotifications
   // -------------------------------------------------------------------------
 
@@ -353,6 +436,8 @@ export function useDemandes() {
     saisirRavitaillement,
     validerDemandeStation,
     validerDemandeCellule,
+    updateDemandeVehicules,
+    retournerRavitaillement,
     fetchNotifications,
     marquerNotificationLue,
   };

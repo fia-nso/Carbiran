@@ -111,13 +111,13 @@ const ChangePasswordPage: React.FC = () => {
             <form onSubmit={handleChangePassword} className="space-y-6">
               {/* Messages d'alerte */}
               {error && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3 animate-fade-in">
                   <div className="flex-shrink-0">
-                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <p className="text-green-700 text-sm flex-1">{error}</p>
+                  <p className="text-red-700 text-sm flex-1">{error}</p>
                 </div>
               )}
 
@@ -173,9 +173,9 @@ const ChangePasswordPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className={`h-2 rounded-full transition-all duration-300 ${
-                        newPassword.length < 6 ? "bg-green-500 w-1/3" :
+                        newPassword.length < 6 ? "bg-red-400 w-1/3" :
                         newPassword.length < 10 ? "bg-amber-500 w-2/3" :
                         "bg-green-500 w-full"
                       }`}

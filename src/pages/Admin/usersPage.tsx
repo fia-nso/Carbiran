@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useUsers } from "@/hooks/useUsers";
 import { useAuthContext } from "@/context/AuthProvider";
+import { supabaseAdmin } from "@/supabaseAdmin";
 import type { AppRole } from "@/types";
 
 type ManagedRole = Exclude<AppRole, "Admin">;
@@ -57,6 +58,12 @@ export default function UsersPage() {
   const [form, setForm] = useState<UserFormState>(initialFormState);
   const [editForm, setEditForm] = useState<EditUserFormState | null>(null);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
+
+  const [resetTarget, setResetTarget] = useState<{ id: string; email: string | null } | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -206,6 +213,36 @@ export default function UsersPage() {
     }
   }
 
+  function openResetModal(item: { id: string; email: string | null }) {
+    setResetTarget(item);
+    setResetPassword("");
+    setResetError(null);
+    setResetSuccess(false);
+  }
+
+  async function handleResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword.length < 6) {
+      setResetError("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+    setResetError(null);
+    setResetSubmitting(true);
+    try {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(resetTarget.id, {
+        password: resetPassword,
+      });
+      if (error) throw error;
+      setResetSuccess(true);
+      setResetPassword("");
+    } catch (err: any) {
+      setResetError(err?.message ?? "Erreur lors de la réinitialisation.");
+    } finally {
+      setResetSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -346,13 +383,20 @@ export default function UsersPage() {
                         {item.role === "Admin" ? (
                           <div className="text-center text-sm text-gray-500">Admin</div>
                         ) : (
-                          <div className="flex justify-center gap-2">
+                          <div className="flex flex-wrap justify-center gap-2">
                             <button
                               onClick={() => openEditModal(item)}
                               disabled={actionUserId !== null}
                               className="px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Modifier
+                            </button>
+                            <button
+                              onClick={() => openResetModal(item)}
+                              disabled={actionUserId !== null}
+                              className="px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Réinit. mot de passe
                             </button>
                             <button
                               onClick={() => handleRoleChange(item.id, "MENAGER")}
@@ -387,6 +431,65 @@ export default function UsersPage() {
         </div>
 
         <div className="w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-green-600 rounded-full opacity-80"></div>
+
+        {/* Reset password modal */}
+        <Modal
+          isOpen={resetTarget !== null}
+          onClose={() => setResetTarget(null)}
+          title="Réinitialiser le mot de passe"
+        >
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Compte : <span className="font-semibold text-gray-900">{resetTarget?.email ?? resetTarget?.id}</span>
+            </p>
+
+            {resetError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                {resetError}
+              </div>
+            )}
+
+            {resetSuccess ? (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700 font-medium text-center">
+                Mot de passe réinitialisé !
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Nouveau mot de passe
+                </label>
+                <input
+                  id="reset-password"
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  placeholder="Minimum 6 caractères"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setResetTarget(null)}
+                className="px-6 py-3 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all font-medium"
+              >
+                {resetSuccess ? "Fermer" : "Annuler"}
+              </button>
+              {!resetSuccess && (
+                <button
+                  type="submit"
+                  disabled={resetSubmitting}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {resetSubmitting ? "Réinitialisation..." : "Réinitialiser"}
+                </button>
+              )}
+            </div>
+          </form>
+        </Modal>
 
         <Modal
           isOpen={isModalOpen}

@@ -4,7 +4,7 @@ import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { uploadPhoto } from "@/lib/uploadPhoto";
-import { notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
+import { createNotification, notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -197,6 +197,7 @@ export default function DetailDemandePage() {
     validerDemandeDept,
     annulerDemande,
     saisirRavitaillement,
+    retournerRavitaillement,
   } = useDemandes();
 
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
@@ -209,6 +210,7 @@ export default function DetailDemandePage() {
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
   const [successMap, setSuccessMap] = useState<Record<string, string>>({});
 
+  const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
   const isStation       = user?.role === "responsable_station";
   const isStationViewer = user?.role === "responsable_station_viewer";
@@ -314,11 +316,34 @@ export default function DetailDemandePage() {
   }
 
   async function handleAnnuler() {
+    if (!demande) return;
     if (!window.confirm("Annuler cette demande ? Cette action est irréversible.")) return;
     setProcessing("annuler");
     try {
       await annulerDemande(id!);
+      void createNotification(
+        demande.created_by,
+        `Votre demande ${demande.departement} a été annulée par le chef de département.`,
+        "annulation",
+        id
+      );
       await fetchDemande();
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  async function handleRetournerRavitaillement(dv: DemandeVehicule) {
+    if (!demande) return;
+    setProcessing(`retourner_${dv.id}`);
+    setSubmitError(null);
+    try {
+      const vehiculeInfo = vehiculesMap[dv.vehicule_id];
+      await retournerRavitaillement(dv.id, demande.id, vehiculeInfo?.matricule);
+      setSuccessMap((prev) => ({ ...prev, [dv.id]: "Renvoyé à la station pour correction." }));
+      await fetchDemande();
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Erreur lors du retour.");
     } finally {
       setProcessing(null);
     }
@@ -455,29 +480,29 @@ export default function DetailDemandePage() {
       return;
     }
 
-    const logoUrl    = `${window.location.origin}/rimatel-logo.jpeg`;
-    const dept       = demande.departement;
-    const isCdpe     = normalizeZone(dept).includes("cpde");
-    const today      = new Date().toLocaleDateString("fr-FR");
-    const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
-    const zoomLevel  = Math.min(100, Math.round(1400 / items.length)) + "%";
-    const tableFontSize = Math.min(11, Math.round(200 / items.length));
-    const totalMontant  = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
+    const logoUrl      = `${window.location.origin}/rimatel-logo.jpeg`;
+    const dept         = demande.departement;
+    const isCdpe       = normalizeZone(dept) === "cpde";
+    const today        = new Date().toLocaleDateString("fr-FR");
+    const dateStr      = new Date(demande.created_at).toLocaleDateString("fr-FR");
+    const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
 
     const rowsHtml = items
-      .map((dv, index) => {
-        const v = vehiculesMap[dv.vehicule_id];
-        return `
-          <tr>
-            <td style="text-align:center;">${index + 1}</td>
-            <td>${escapeHtml(v?.vehicule || "-")}<br/><small>${escapeHtml(v?.matricule || "-")}</small></td>
-            <td>${formatNumber(dv.montant ?? 0)}</td>
-            <td>${dateStr}</td>
-            <td>${escapeHtml(v?.chauffeur_responsable || "-")}<br/><small>Nom :</small></td>
-            <td>STATION</td>
-          </tr>
-        `;
-      })
+      .map(
+        (dv, index) => {
+          const v = vehiculesMap[dv.vehicule_id];
+          return `
+            <tr>
+              <td style="text-align:center;">${index + 1}</td>
+              <td>${escapeHtml(v?.vehicule || "-")}<br/><small>${escapeHtml(v?.matricule || "-")}</small></td>
+              <td>${formatNumber(dv.montant ?? 0)}</td>
+              <td>${dateStr}</td>
+              <td>${escapeHtml(v?.chauffeur_responsable || "-")}<br/><small>Nom :</small></td>
+              <td>STATION</td>
+            </tr>
+          `;
+        }
+      )
       .join("");
 
     const headerInfoHtml = isCdpe
@@ -489,12 +514,12 @@ export default function DetailDemandePage() {
     const signaturesHtml = isCdpe
       ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
 
     printWindow.document.write(`
@@ -504,26 +529,33 @@ export default function DetailDemandePage() {
           <meta charset="utf-8" />
           <title>Situation des Dépenses CARBURANT</title>
           <style>
-            * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; max-width: 100%; overflow: hidden; zoom: ${zoomLevel}; }
-            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
-            .doc-header img { width: 100px; height: 100px; object-fit: contain; flex-shrink: 0; }
-            .doc-header-info { display: flex; flex-direction: column; align-items: flex-start; }
-            .doc-header-info p { margin: 2px 0; font-size: 14px; }
-            .doc-date { font-size: 14px; text-align: right; white-space: nowrap; }
-            .doc-title { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 16px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #374151; padding: 5px 4px; text-align: left; vertical-align: top; font-size: 11px; }
-            th { background: #1f2937; color: white; font-weight: 700; text-align: center; font-size: 12px; }
-            tfoot td { font-weight: 700; font-size: 13px; }
-            .signatures { display: flex; gap: 12px; margin-top: 48px; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; }
+            .doc-header { display: flex; align-items: center; justify-content: space-between;
+                          gap: 16px; margin-bottom: 4px; }
+            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
+            .doc-header-info p { margin: 2px 0; font-size: 13px; }
+            .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
+            .doc-title { text-align: center; font-size: 15px; font-weight: 700;
+                          text-transform: uppercase; letter-spacing: 0.04em;
+                          margin: 10px 0 12px; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            thead th { background: #1f2937; color: white; font-weight: 700;
+                        text-align: center; font-size: 11px;
+                        border: 1px solid #374151; padding: 5px 4px; }
+            tbody td { border: 1px solid #374151; padding: 5px 4px;
+                        text-align: left; vertical-align: top; font-size: 11px; }
+            .total-row td { border: 1px solid #374151; padding: 5px 4px;
+                             font-size: 12px; font-weight: 700; }
+            .signatures { display: flex; gap: 12px; margin-top: 32px; }
             .sig-block { flex: 1; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 13px; margin: 0 0 6px; text-transform: uppercase; }
-            .sig-space { height: 60px; }
+            .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
+            .sig-space { height: 56px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { margin: 0; size: A4 landscape; }
-              body { zoom: ${zoomLevel}; }
-              table { font-size: ${tableFontSize}px; }
+              @page { size: A4 landscape; margin: 0; }
+              body { font-size: 11px; }
+              thead { display: table-header-group; }
+              tr { page-break-inside: avoid; }
             }
           </style>
         </head>
@@ -537,22 +569,22 @@ export default function DetailDemandePage() {
           <table>
             <thead>
               <tr>
-                <th>N°</th>
-                <th>Description</th>
-                <th>Montant</th>
-                <th>Date/Période</th>
-                <th>Responsable</th>
-                <th>Bénéficiaire</th>
+                <th style="width:5%;">N°</th>
+                <th style="width:28%;">Description</th>
+                <th style="width:15%;">Montant</th>
+                <th style="width:15%;">Date/Période</th>
+                <th style="width:22%;">Responsable</th>
+                <th style="width:15%;">Bénéficiaire</th>
               </tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2" style="text-align:right;font-weight:700;">Total</td>
-                <td style="font-weight:700;">${formatNumber(totalMontant)}</td>
+            <tbody>
+              ${rowsHtml}
+              <tr class="total-row">
+                <td colspan="2" style="text-align:right;">Total</td>
+                <td>${formatNumber(totalMontant)}</td>
                 <td colspan="3"></td>
               </tr>
-            </tfoot>
+            </tbody>
           </table>
           <div class="signatures">${signaturesHtml}</div>
         </body>
@@ -588,7 +620,7 @@ export default function DetailDemandePage() {
     function bonHtml(dv: DemandeVehicule, num: number) {
       const v          = vehiculesMap[dv.vehicule_id];
       const itemZone   = v?.zone ?? dept;
-      const itemIsCdpe = normalizeZone(itemZone).includes("cpde");
+      const itemIsCdpe = normalizeZone(itemZone) === "cpde";
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
@@ -643,6 +675,10 @@ export default function DetailDemandePage() {
             <div class="bon-signatures">
               <div class="bon-sig">
                 <p class="bon-sig-title">Signature Chef Département</p>
+                <div class="bon-sig-space"></div>
+              </div>
+              <div class="bon-sig">
+                <p class="bon-sig-title">VISA Chef Cellule CSÉ</p>
                 <div class="bon-sig-space"></div>
               </div>
               <div class="bon-sig">
@@ -775,6 +811,20 @@ export default function DetailDemandePage() {
 
         {/* Action bar */}
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4 border-t border-gray-100">
+          {/* chef_de_cours : modifier si en_attente */}
+          {isChefDeCours && demande.statut === "en_attente" && (
+            <Link
+              to={`/demandes/${id}/modifier`}
+              className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Modifier la demande
+            </Link>
+          )}
+
+          {/* chef_departement : valider + annuler + modifier */}
           {isChefDept && demande.statut === "en_attente" && (
             <>
               <button
@@ -793,6 +843,20 @@ export default function DetailDemandePage() {
               </button>
             </>
           )}
+
+          {isChefDept &&
+            (demande.statut === "en_attente" || demande.statut === "validee_dept") &&
+            !(demande.demande_vehicules ?? []).some((dv) => dv.statut === "ravitaille") && (
+              <Link
+                to={`/demandes/${id}/modifier`}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Modifier la demande
+              </Link>
+            )}
 
           {isChefDept && (
             <>
@@ -852,6 +916,7 @@ export default function DetailDemandePage() {
             onEnvoyer={() => handleEnvoyerRavitaillement(dv)}
             onValider={() => handleValiderVehicule(dv)}
             onRefuser={() => handleRefuserVehicule(dv)}
+            onRetourner={() => handleRetournerRavitaillement(dv)}
           />
         ))}
       </div>
@@ -882,6 +947,7 @@ interface VehiculeCardProps {
   onEnvoyer: () => void;
   onValider: () => void;
   onRefuser: () => void;
+  onRetourner: () => void;
 }
 
 function VehiculeCard({
@@ -901,6 +967,7 @@ function VehiculeCard({
   onEnvoyer,
   onValider,
   onRefuser,
+  onRetourner,
 }: VehiculeCardProps) {
   const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
   const showAmounts        = (isCellule || isChefDept || isStationViewer) && dv.statut !== "en_attente";
@@ -909,6 +976,7 @@ function VehiculeCard({
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
   const isRefusing         = processing === `refuser_${dv.id}`;
+  const isReturning        = processing === `retourner_${dv.id}`;
 
   const canEnvoyer =
     ravForm != null &&
@@ -990,19 +1058,26 @@ function VehiculeCard({
         </div>
       )}
 
-      {/* Cellule — valider / refuser par véhicule */}
+      {/* Cellule — valider / refuser / retourner par véhicule */}
       {showCelluleActions && (
         <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row gap-3 border-b border-gray-100">
           <button
             onClick={onValider}
-            disabled={isValidating || isRefusing}
+            disabled={isValidating || isRefusing || isReturning}
             className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
           >
             {isValidating ? "Validation…" : "Valider ce véhicule"}
           </button>
           <button
+            onClick={onRetourner}
+            disabled={isValidating || isRefusing || isReturning}
+            className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-orange-300 text-orange-700 rounded-xl hover:bg-orange-50 transition-colors text-sm font-medium disabled:opacity-50"
+          >
+            {isReturning ? "Retour…" : "Retourner à la station"}
+          </button>
+          <button
             onClick={onRefuser}
-            disabled={isValidating || isRefusing}
+            disabled={isValidating || isRefusing || isReturning}
             className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
           >
             {isRefusing ? "Refus…" : "Refuser ce véhicule"}

@@ -17,6 +17,7 @@ import DashboardPage from "@/pages/Dashboard/dashboardPage";
 import DemandesPage from "@/pages/Demandes/demandesPage";
 import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
 import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
+import ModifierDemandePage from "@/pages/Demandes/modifierDemandePage";
 
 // Redirige vers /dashboard pour Admin/MENAGER, vers /demandes pour tous les autres.
 function DefaultRedirect() {
@@ -75,6 +76,7 @@ const AppRouter: React.FC = () => {
               {/* chef_de_cours et chef_departement */}
               <Route element={<RequireRole roles={["chef_de_cours", "chef_departement"]} />}>
                 <Route path="/demandes/nouvelle" element={<NouvelleDemandePage />} />
+                <Route path="/demandes/:id/modifier" element={<ModifierDemandePage />} />
               </Route>
 
               {/* Catch-all dans le layout → redirection intelligente */}
