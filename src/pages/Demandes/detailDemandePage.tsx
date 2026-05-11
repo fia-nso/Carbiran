@@ -913,6 +913,7 @@ function VehiculeCard({
   const canEnvoyer =
     ravForm != null &&
     !!ravForm.montant &&
+    parseFloat(ravForm.n_liter) > 0 &&
     Object.values(ravForm.photos).some(Boolean);
 
   const vehiculeLabel = vehiculeInfo
@@ -1024,6 +1025,7 @@ function VehiculeCard({
             <NumericField
               id={`n_liter-${dv.id}`}
               label="Litres (L)"
+              required
               value={ravForm.n_liter}
               onChange={(v) => onUpdateForm({ n_liter: v })}
             />
@@ -1055,7 +1057,7 @@ function VehiculeCard({
             <button
               onClick={onEnvoyer}
               disabled={isSaving || !canEnvoyer}
-              title={!canEnvoyer ? "Saisissez le montant et au moins une photo" : undefined}
+              title={!canEnvoyer ? "Saisissez le montant, les litres (L) et au moins une photo" : undefined}
               className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? "Envoi en cours…" : "Envoyer ce ravitaillement"}
@@ -1087,16 +1089,18 @@ function NumericField({
   label,
   value,
   onChange,
+  required,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
+  required?: boolean;
 }) {
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-gray-600 mb-1">
-        {label}
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       <input
         id={id}

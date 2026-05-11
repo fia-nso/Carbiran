@@ -23,7 +23,7 @@ export default function useAuth(): UseAuthReturn {
     try {
       const { data, error: profileErr } = await supabase
         .from("profiles")
-        .select("id, email, nom, prenom, role")
+        .select("id, email, nom, prenom, role, departement")
         .eq("id", userId)
         .single();
 
@@ -38,6 +38,7 @@ export default function useAuth(): UseAuthReturn {
           nom: data.nom,
           prenom: data.prenom,
           role: data.role,
+          departement: data.departement ?? null,
         };
         setUser(nextUser);
         return nextUser;

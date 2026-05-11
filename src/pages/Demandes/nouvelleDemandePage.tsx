@@ -16,12 +16,6 @@ const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
 
 const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cpde", "dc"];
 
-function matchDept(raw: string | null | undefined): Departement {
-  if (!raw) return "Zone A";
-  const norm = raw.trim().toLowerCase();
-  return DEPARTEMENTS.find((d) => d.toLowerCase() === norm) ?? "Zone A";
-}
-
 export default function NouvelleDemandePage() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
@@ -30,6 +24,7 @@ export default function NouvelleDemandePage() {
 
   const isChefDept = user?.role === "chef_departement";
 
+  // État du sélecteur uniquement pour chef_de_cours
   const [departement, setDepartement] = useState<Departement>("Zone A");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [matriculeSearch, setMatriculeSearch] = useState("");
@@ -42,18 +37,7 @@ export default function NouvelleDemandePage() {
     }
   }, [user, navigate]);
 
-  // Pour chef_departement : verrouille le département sur user.departement dès que disponible
-  useEffect(() => {
-    if (user?.role === "chef_departement" && user.departement) {
-      setDepartement(matchDept(user.departement));
-    }
-  }, [user?.role, user?.departement]);
-
-  // Département effectif : pour chef_departement, toujours dérivé directement de user.departement
-  // pour éviter tout problème de timing avec l'état (pas de flash "Zone A")
-  const effectiveDepartement: Departement =
-    isChefDept && user?.departement ? matchDept(user.departement) : departement;
-
+  // Réinitialise la sélection quand le département change (chef_de_cours uniquement)
   useEffect(() => {
     setSelected(new Set());
     setMatriculeSearch("");
@@ -63,10 +47,9 @@ export default function NouvelleDemandePage() {
     () =>
       allVehicules.filter((v) => {
         if (isChefDept) {
-          // Zone doit correspondre exactement au département de l'utilisateur + centre NKTT
           if (!user?.departement) return false;
           if (normalizeZone(v.zone) !== normalizeZone(user.departement)) return false;
-          if (v.centre !== "NKTT") return false;
+          if (v.centre?.trim().toUpperCase() !== "NKTT") return false;
           return true;
         }
         const zoneMatch =
@@ -74,7 +57,7 @@ export default function NouvelleDemandePage() {
             ? !KNOWN_ZONES.includes(normalizeZone(v.zone))
             : normalizeZone(v.zone) === normalizeZone(departement);
         if (!zoneMatch) return false;
-        if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
+        if (user?.role === "chef_de_cours" && v.centre?.trim().toUpperCase() !== "NKTT") return false;
         return true;
       }),
     [allVehicules, departement, isChefDept, user?.role, user?.departement]
@@ -128,13 +111,50 @@ export default function NouvelleDemandePage() {
     setError(null);
     setSubmitting(true);
     try {
-      await createDemande(effectiveDepartement, [...selected], user?.role);
+      const deptToSubmit = isChefDept ? (user?.departement ?? "") : departement;
+      await createDemande(deptToSubmit, [...selected], user?.role);
       navigate("/demandes");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // undefined = profil pas encore chargé → spinner
+  // null      = profil chargé, champ departement absent en DB → message d'erreur
+  // string    = prêt → afficher normalement
+  if (!user || (isChefDept && user.departement === undefined)) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin w-7 h-7 border-4 border-gray-200 border-t-teal-500 rounded-full" />
+      </div>
+    );
+  }
+
+  if (isChefDept && user.departement === null) {
+    return (
+      <div className="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0 space-y-6">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/demandes"
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="Retour"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-900">Nouvelle demande</h1>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+          <p className="text-sm font-semibold text-red-800">Département non configuré</p>
+          <p className="text-sm text-red-600 mt-1">
+            Votre compte n'a pas de département assigné. Contactez un administrateur.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -157,7 +177,7 @@ export default function NouvelleDemandePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Département selector — masqué pour chef_departement (dept verrouillé) */}
+        {/* Département : badge informatif pour chef_departement, sélecteur pour chef_de_cours */}
         {isChefDept ? (
           <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 flex items-center gap-3">
             <span className="text-teal-600">
@@ -167,7 +187,7 @@ export default function NouvelleDemandePage() {
             </span>
             <div>
               <p className="text-xs text-teal-600 font-medium">Département</p>
-              <p className="text-sm font-semibold text-teal-900">{DEPT_LABELS[effectiveDepartement] ?? effectiveDepartement}</p>
+              <p className="text-sm font-semibold text-teal-900">{user?.departement ?? "—"}</p>
             </div>
           </div>
         ) : (
@@ -196,7 +216,9 @@ export default function NouvelleDemandePage() {
         <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div>
-              <p className="text-sm font-semibold text-gray-700">Véhicules — {effectiveDepartement}</p>
+              <p className="text-sm font-semibold text-gray-700">
+                Véhicules — {isChefDept ? (user?.departement ?? "—") : departement}
+              </p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {selected.size} sélectionné(s)
               </p>
