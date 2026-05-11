@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
@@ -203,15 +203,11 @@ export default function RavitaillementVehiculePage() {
     [displayedRavitaillements]
   );
   const selectedRavitaillements = useMemo(
-    () => displayedRavitaillements.filter((item) => selectedIds.includes(item.id)),
-    [displayedRavitaillements, selectedIds]
+    () => ravitaillements.filter((item) => selectedIds.includes(item.id)),
+    [ravitaillements, selectedIds]
   );
   const isAllDisplayedSelected =
     displayedIds.length > 0 && displayedIds.every((id) => selectedIds.includes(id));
-
-  useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => displayedIds.includes(id)));
-  }, [displayedIds]);
 
   function updateForm<K extends keyof RavitaillementFormState>(
     key: K,
@@ -505,7 +501,7 @@ export default function RavitaillementVehiculePage() {
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
     const zone = allZones[0] ?? "—";
-    const isCdpe = normalizeZone(zone).includes("cpde");
+    const isCdpe = normalizeZone(zone) === "cpde";
     const today = new Date().toLocaleDateString("fr-FR");
     const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
 
@@ -550,57 +546,50 @@ export default function RavitaillementVehiculePage() {
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            /* En-tête du document dans thead */
-            .doc-header-row td { border: none; padding-bottom: 6px; }
-            .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 4px; }
+            /* En-tête du document (une seule fois, hors tableau) */
+            .doc-header { display: flex; align-items: center; justify-content: space-between;
+                          gap: 16px; margin-bottom: 4px; }
             .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
             .doc-header-info p { margin: 2px 0; font-size: 13px; }
             .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
-            .doc-title-row td { border: none; text-align: center; font-size: 15px; font-weight: 700;
-                                text-transform: uppercase; letter-spacing: 0.04em;
-                                padding: 10px 0 12px; }
-            /* En-têtes colonnes */
-            .col-header-row th { background: #1f2937; color: white; font-weight: 700;
-                                  text-align: center; font-size: 11px;
-                                  border: 1px solid #374151; padding: 5px 4px; }
+            .doc-title { text-align: center; font-size: 15px; font-weight: 700;
+                          text-transform: uppercase; letter-spacing: 0.04em;
+                          margin: 10px 0 12px; }
+            /* Tableau */
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            /* En-têtes colonnes (répétés via thead) */
+            thead th { background: #1f2937; color: white; font-weight: 700;
+                        text-align: center; font-size: 11px;
+                        border: 1px solid #374151; padding: 5px 4px; }
             /* Lignes de données */
-            tbody tr td { border: 1px solid #374151; padding: 5px 4px;
-                           text-align: left; vertical-align: top; font-size: 11px; }
+            tbody td { border: 1px solid #374151; padding: 5px 4px;
+                        text-align: left; vertical-align: top; font-size: 11px; }
             /* Ligne de total */
             .total-row td { border: 1px solid #374151; padding: 5px 4px;
                              font-size: 12px; font-weight: 700; }
-            /* Signatures dans tfoot */
-            .sig-row td { border: none; padding-top: 32px; }
-            .signatures { display: flex; gap: 12px; }
+            /* Signatures (une seule fois, après le tableau) */
+            .signatures { display: flex; gap: 12px; margin-top: 32px; }
             .sig-block { flex: 1; text-align: center; }
             .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 56px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { size: A4 landscape; margin: 10mm; }
+              @page { size: A4 landscape; margin: 0; }
               body { zoom: 100%; font-size: 11px; }
               thead { display: table-header-group; }
-              tfoot { display: table-footer-group; }
               tr { page-break-inside: avoid; }
             }
           </style>
         </head>
         <body>
+          <div class="doc-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="doc-header-info">${headerInfoHtml}</div>
+            <div class="doc-date">Date : ${today}</div>
+          </div>
+          <div class="doc-title">Situation des dépenses carburant</div>
           <table>
             <thead>
-              <tr class="doc-header-row">
-                <td colspan="6">
-                  <div class="doc-header">
-                    <img src="${logoUrl}" alt="Logo RIMATEL" />
-                    <div class="doc-header-info">${headerInfoHtml}</div>
-                    <div class="doc-date">Date : ${today}</div>
-                  </div>
-                </td>
-              </tr>
-              <tr class="doc-title-row">
-                <td colspan="6">Situation des dépenses carburant</td>
-              </tr>
-              <tr class="col-header-row">
+              <tr>
                 <th style="width:5%;">N°</th>
                 <th style="width:28%;">Description</th>
                 <th style="width:15%;">Montant</th>
@@ -609,13 +598,6 @@ export default function RavitaillementVehiculePage() {
                 <th style="width:15%;">Bénéficiaire</th>
               </tr>
             </thead>
-            <tfoot>
-              <tr class="sig-row">
-                <td colspan="6">
-                  <div class="signatures">${signaturesHtml}</div>
-                </td>
-              </tr>
-            </tfoot>
             <tbody>
               ${rowsHtml}
               <tr class="total-row">
@@ -625,6 +607,7 @@ export default function RavitaillementVehiculePage() {
               </tr>
             </tbody>
           </table>
+          <div class="signatures">${signaturesHtml}</div>
         </body>
       </html>
     `);
@@ -649,7 +632,7 @@ export default function RavitaillementVehiculePage() {
 
     function bonHtml(item: (typeof selectedRavitaillements)[0], num: number) {
       const itemZone = item.vehicule?.zone ?? "";
-      const itemIsCdpe = normalizeZone(itemZone).includes("cpde");
+      const itemIsCdpe = normalizeZone(itemZone) === "cpde";
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
