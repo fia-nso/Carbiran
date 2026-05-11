@@ -404,7 +404,7 @@ export default function DashboardPage() {
 
             {/* Summary KPI strip when no filters */}
             {!hasFilters && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 sm:px-6 py-4 bg-teal-50/50 border-b border-gray-100">
+              <div className="grid grid-cols-2 gap-3 px-4 sm:px-6 py-4 bg-teal-50/50 border-b border-gray-100">
                 <div>
                   <p className="text-xs text-teal-700 font-medium">Nb ravitaillements</p>
                   <p className="text-xl font-bold text-teal-900 mt-0.5">{formatCount(monthlyRows[selectedMonthIndex].nbRavitaillements)}</p>
@@ -412,14 +412,6 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-xs text-orange-700 font-medium">Montant (MRU)</p>
                   <p className="text-xl font-bold text-orange-900 mt-0.5">{formatAmount(monthlyRows[selectedMonthIndex].montantRavitaille)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-green-700 font-medium">Litres</p>
-                  <p className="text-xl font-bold text-green-900 mt-0.5">{formatMetric(monthlyRows[selectedMonthIndex].litres)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 font-medium">Kilometrage</p>
-                  <p className="text-xl font-bold text-gray-800 mt-0.5">{formatMetric(monthlyRows[selectedMonthIndex].kilometrage)}</p>
                 </div>
               </div>
             )}
@@ -442,8 +434,6 @@ export default function DashboardPage() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Centre</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Nb ravit.</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Montant</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Litres</th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Km</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -455,8 +445,6 @@ export default function DashboardPage() {
                           <td className="px-4 py-3 text-gray-500 text-sm">{row.centre}</td>
                           <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatCount(row.count)}</td>
                           <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatAmount(row.montant)}</td>
-                          <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatMetric(row.litres)}</td>
-                          <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatMetric(row.kilometrage)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -465,8 +453,6 @@ export default function DashboardPage() {
                         <td colSpan={4} className="px-4 py-3 font-bold text-gray-900 text-sm">Total ({vehiculeRows.length} vehicule{vehiculeRows.length > 1 ? "s" : ""})</td>
                         <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatCount(detailTotals.count)}</td>
                         <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatAmount(detailTotals.montant)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatMetric(detailTotals.litres)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatMetric(detailTotals.kilometrage)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -487,18 +473,10 @@ export default function DashboardPage() {
                         <span className="bg-gray-100 px-2 py-0.5 rounded">{row.zone}</span>
                         <span className="bg-gray-100 px-2 py-0.5 rounded">{row.centre}</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="pt-1">
                         <div className="bg-orange-50 rounded-lg p-2 text-center">
-                          <p className="text-xs text-orange-600 font-medium">Montant</p>
+                          <p className="text-xs text-orange-600 font-medium">Montant (MRU)</p>
                           <p className="text-sm font-bold text-orange-800">{formatAmount(row.montant)}</p>
-                        </div>
-                        <div className="bg-green-50 rounded-lg p-2 text-center">
-                          <p className="text-xs text-green-600 font-medium">Litres</p>
-                          <p className="text-sm font-bold text-green-800">{formatMetric(row.litres)}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-2 text-center">
-                          <p className="text-xs text-gray-500 font-medium">Km</p>
-                          <p className="text-sm font-bold text-gray-700">{formatMetric(row.kilometrage)}</p>
                         </div>
                       </div>
                     </div>
@@ -508,19 +486,9 @@ export default function DashboardPage() {
                     <p className="font-bold text-gray-900 text-sm mb-2">
                       Total — {vehiculeRows.length} vehicule{vehiculeRows.length > 1 ? "s" : ""}, {formatCount(detailTotals.count)} ravitaillement{detailTotals.count > 1 ? "s" : ""}
                     </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-orange-50 rounded-lg p-2 text-center border border-orange-200">
-                        <p className="text-xs text-orange-600 font-medium">Montant</p>
-                        <p className="text-sm font-bold text-orange-800">{formatAmount(detailTotals.montant)}</p>
-                      </div>
-                      <div className="bg-green-50 rounded-lg p-2 text-center border border-green-200">
-                        <p className="text-xs text-green-600 font-medium">Litres</p>
-                        <p className="text-sm font-bold text-green-800">{formatMetric(detailTotals.litres)}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-2 text-center border border-gray-200">
-                        <p className="text-xs text-gray-500 font-medium">Km</p>
-                        <p className="text-sm font-bold text-gray-700">{formatMetric(detailTotals.kilometrage)}</p>
-                      </div>
+                    <div className="bg-orange-50 rounded-lg p-2 text-center border border-orange-200">
+                      <p className="text-xs text-orange-600 font-medium">Montant (MRU)</p>
+                      <p className="text-sm font-bold text-orange-800">{formatAmount(detailTotals.montant)}</p>
                     </div>
                   </div>
                 </div>
