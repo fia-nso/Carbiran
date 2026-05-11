@@ -334,15 +334,18 @@ export function useDemandes() {
         .eq("demande_id", demandeId);
       if (deleteErr) throw deleteErr;
 
-      const rows = vehiculeIds.map((vehicule_id) => ({
-        demande_id: demandeId,
-        vehicule_id,
-        statut: "en_attente",
-      }));
-      const { error: insertErr } = await supabase
-        .from("demande_vehicules")
-        .insert(rows);
-      if (insertErr) throw insertErr;
+      // Insert ONLY the new selection (empty array → no insert)
+      if (vehiculeIds.length > 0) {
+        const rows = vehiculeIds.map((vehicule_id) => ({
+          demande_id: demandeId,
+          vehicule_id,
+          statut: "en_attente",
+        }));
+        const { error: insertErr } = await supabase
+          .from("demande_vehicules")
+          .insert(rows);
+        if (insertErr) throw insertErr;
+      }
 
       await fetchDemandes();
     },
