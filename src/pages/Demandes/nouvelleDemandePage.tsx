@@ -16,11 +16,19 @@ const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
 
 const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cdpe", "dc"];
 
+function matchDept(raw: string | null | undefined): Departement {
+  if (!raw) return "Zone A";
+  const norm = raw.trim().toLowerCase();
+  return DEPARTEMENTS.find((d) => d.toLowerCase() === norm) ?? "Zone A";
+}
+
 export default function NouvelleDemandePage() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
   const { createDemande } = useDemandes();
   const { allVehicules, loading: vLoading } = useVehicules();
+
+  const isChefDept = user?.role === "chef_departement";
 
   const [departement, setDepartement] = useState<Departement>("Zone A");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -29,10 +37,17 @@ export default function NouvelleDemandePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && user.role !== "chef_de_cours") {
+    if (user && user.role !== "chef_de_cours" && user.role !== "chef_departement") {
       navigate("/demandes", { replace: true });
     }
   }, [user, navigate]);
+
+  // Pour chef_departement : verrouille le département sur user.departement
+  useEffect(() => {
+    if (isChefDept && user?.departement) {
+      setDepartement(matchDept(user.departement));
+    }
+  }, [isChefDept, user?.departement]);
 
   useEffect(() => {
     setSelected(new Set());
@@ -47,7 +62,11 @@ export default function NouvelleDemandePage() {
             ? !KNOWN_ZONES.includes(normalizeZone(v.zone))
             : normalizeZone(v.zone) === normalizeZone(departement);
         if (!zoneMatch) return false;
-        if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
+        if (
+          (user?.role === "chef_de_cours" || user?.role === "chef_departement") &&
+          v.centre !== "NKTT"
+        )
+          return false;
         return true;
       }),
     [allVehicules, departement, user?.role]
@@ -130,26 +149,40 @@ export default function NouvelleDemandePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Département selector */}
-        <div className="bg-white rounded-2xl shadow border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-700 mb-4">Département</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {DEPARTEMENTS.map((dept) => (
-              <button
-                key={dept}
-                type="button"
-                onClick={() => setDepartement(dept)}
-                className={`px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
-                  departement === dept
-                    ? "border-teal-500 bg-teal-50 text-teal-800"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                {DEPT_LABELS[dept] ?? dept}
-              </button>
-            ))}
+        {/* Département selector — masqué pour chef_departement (dept verrouillé) */}
+        {isChefDept ? (
+          <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 flex items-center gap-3">
+            <span className="text-teal-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </span>
+            <div>
+              <p className="text-xs text-teal-600 font-medium">Département</p>
+              <p className="text-sm font-semibold text-teal-900">{DEPT_LABELS[departement] ?? departement}</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow border border-gray-200 p-6">
+            <p className="text-sm font-semibold text-gray-700 mb-4">Département</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {DEPARTEMENTS.map((dept) => (
+                <button
+                  key={dept}
+                  type="button"
+                  onClick={() => setDepartement(dept)}
+                  className={`px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                    departement === dept
+                      ? "border-teal-500 bg-teal-50 text-teal-800"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {DEPT_LABELS[dept] ?? dept}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Véhicules */}
         <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">

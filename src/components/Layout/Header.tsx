@@ -16,6 +16,7 @@ export default function Header() {
 
   const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
   const isAdmin          = user?.role === "Admin";
+  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
   const handleLogout = async () => {
     try {
@@ -56,7 +57,12 @@ export default function Header() {
                   <Link to="/chpass"   className={NAV_LINK}>Securite</Link>
                 </>
               ) : (
-                <Link to="/demandes" className={NAV_LINK}>Demandes</Link>
+                <>
+                  <Link to="/demandes" className={NAV_LINK}>Demandes</Link>
+                  {canCreateDemande && (
+                    <Link to="/demandes/nouvelle" className={NAV_LINK}>Nouvelle demande</Link>
+                  )}
+                </>
               )}
             </nav>
 
@@ -118,7 +124,12 @@ export default function Header() {
               <Link to="/chpass"   className={MOBILE_NAV_LINK} onClick={closeMenu}>Securite</Link>
             </>
           ) : (
-            <Link to="/demandes" className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+            <>
+              <Link to="/demandes" className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              {canCreateDemande && (
+                <Link to="/demandes/nouvelle" className={MOBILE_NAV_LINK} onClick={closeMenu}>Nouvelle demande</Link>
+              )}
+            </>
           )}
           <div className="pt-2 border-t border-white/10">
             <button

@@ -27,11 +27,15 @@ export default function DemandesPage() {
 
   useEffect(() => { void fetchDemandes(); }, [fetchDemandes]);
 
-  const isChefDeCours = user?.role === "chef_de_cours";
+  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
-  const total       = demandes.length;
-  const enAttente   = demandes.filter((d) => d.statut === "en_attente").length;
-  const validees    = demandes.filter((d) => d.statut === "validee_cellule").length;
+  const total     = demandes.length;
+  const enAttente = demandes.filter((d) => d.statut === "en_attente").length;
+  const validees  = demandes.filter(
+    (d) =>
+      d.statut === "validee_cellule" ||
+      (d.demande_vehicules ?? []).some((dv) => dv.statut === "valide")
+  ).length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 py-4 sm:py-6 px-4 sm:px-6 lg:px-0">
@@ -42,7 +46,7 @@ export default function DemandesPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Demandes de ravitaillement</h1>
             <p className="text-gray-500 text-sm mt-1">Suivi des demandes selon votre rôle.</p>
           </div>
-          {isChefDeCours && (
+          {canCreateDemande && (
             <Link
               to="/demandes/nouvelle"
               className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white px-5 py-3 min-h-[44px] rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm w-full sm:w-auto"
@@ -83,7 +87,7 @@ export default function DemandesPage() {
         ) : demandes.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-gray-400">Aucune demande disponible.</p>
-            {isChefDeCours && (
+            {canCreateDemande && (
               <Link to="/demandes/nouvelle" className="mt-4 inline-block text-sm text-teal-600 hover:underline font-medium">
                 Créer la première demande →
               </Link>
