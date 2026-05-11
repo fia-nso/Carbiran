@@ -4,7 +4,7 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useVehicules } from "@/hooks/useVehicule";
 
-const DEPARTEMENTS = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE", "DC", "Autre"] as const;
+const DEPARTEMENTS = ["Zone A", "Zone B", "RX&SYS", "FO", "CPDE", "DC", "Autre"] as const;
 type Departement = typeof DEPARTEMENTS[number];
 
 const DEPT_LABELS: Partial<Record<Departement, string>> = {
@@ -14,7 +14,7 @@ const DEPT_LABELS: Partial<Record<Departement, string>> = {
 
 const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
 
-const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cdpe", "dc"];
+const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cpde", "dc"];
 
 function matchDept(raw: string | null | undefined): Departement {
   if (!raw) return "Zone A";

@@ -100,7 +100,7 @@ create table if not exists public.demandes_ravitaillement (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint demandes_rav_departement_valid check (
-    departement in ('Zone A', 'Zone B', 'RS', 'FO', 'CDPE')
+    departement in ('Zone A', 'Zone B', 'RS', 'FO', 'CPDE')
   ),
   constraint demandes_rav_statut_valid check (
     statut in ('en_attente', 'validee_dept', 'validee_station', 'validee_cellule', 'annulee')
@@ -422,7 +422,7 @@ alter table public.demandes_ravitaillement
 
 alter table public.demandes_ravitaillement
   add constraint demandes_rav_departement_valid check (
-    departement in ('Zone A', 'Zone B', 'RS', 'RX&SYS', 'FO', 'CDPE', 'DC', 'Autre')
+    departement in ('Zone A', 'Zone B', 'RS', 'RX&SYS', 'FO', 'CPDE', 'DC', 'Autre')
   );
 
 commit;

@@ -456,7 +456,7 @@ export default function DetailDemandePage() {
 
     const logoUrl    = `${window.location.origin}/rimatel-logo.jpeg`;
     const dept       = demande.departement;
-    const isCdpe     = normalizeZone(dept).includes("cdpe");
+    const isCdpe     = normalizeZone(dept).includes("cpde");
     const today      = new Date().toLocaleDateString("fr-FR");
     const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const zoomLevel  = Math.min(100, Math.round(1400 / items.length)) + "%";
@@ -587,7 +587,7 @@ export default function DetailDemandePage() {
     function bonHtml(dv: DemandeVehicule, num: number) {
       const v          = vehiculesMap[dv.vehicule_id];
       const itemZone   = v?.zone ?? dept;
-      const itemIsCdpe = normalizeZone(itemZone).includes("cdpe");
+      const itemIsCdpe = normalizeZone(itemZone).includes("cpde");
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
