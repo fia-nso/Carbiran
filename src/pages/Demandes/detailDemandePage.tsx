@@ -43,6 +43,8 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
+const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -378,7 +380,7 @@ export default function DetailDemandePage() {
           n_liter:            dv.n_liter ?? 0,
           kilometrage:        dv.kilometrage ?? 0,
           date:               new Date().toISOString().split("T")[0],
-          commentaire:        `Validé via demande ${id}`,
+          commentaire:        "Ravitaillement validé par la Cellule CSÉ",
         });
       if (insertErr) throw insertErr;
 
@@ -454,7 +456,7 @@ export default function DetailDemandePage() {
 
     const logoUrl    = `${window.location.origin}/rimatel-logo.jpeg`;
     const dept       = demande.departement;
-    const isCdpe     = dept.toUpperCase().includes("CDPE");
+    const isCdpe     = normalizeZone(dept).includes("cdpe");
     const today      = new Date().toLocaleDateString("fr-FR");
     const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const zoomLevel  = Math.min(100, Math.round(1400 / items.length)) + "%";
@@ -585,7 +587,7 @@ export default function DetailDemandePage() {
     function bonHtml(dv: DemandeVehicule, num: number) {
       const v          = vehiculesMap[dv.vehicule_id];
       const itemZone   = v?.zone ?? dept;
-      const itemIsCdpe = itemZone.toUpperCase().includes("CDPE");
+      const itemIsCdpe = normalizeZone(itemZone).includes("cdpe");
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;

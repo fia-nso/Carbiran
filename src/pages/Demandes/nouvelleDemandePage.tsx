@@ -12,7 +12,9 @@ const DEPT_LABELS: Partial<Record<Departement, string>> = {
   "Autre": "Autre département",
 };
 
-const KNOWN_DEPT_ZONES: readonly string[] = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE", "DC"];
+const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
+
+const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cdpe", "dc"];
 
 export default function NouvelleDemandePage() {
   const { user } = useAuthContext();
@@ -42,8 +44,8 @@ export default function NouvelleDemandePage() {
       allVehicules.filter((v) => {
         const zoneMatch =
           departement === "Autre"
-            ? !KNOWN_DEPT_ZONES.includes(v.zone)
-            : v.zone === departement;
+            ? !KNOWN_ZONES.includes(normalizeZone(v.zone))
+            : normalizeZone(v.zone) === normalizeZone(departement);
         if (!zoneMatch) return false;
         if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
         return true;

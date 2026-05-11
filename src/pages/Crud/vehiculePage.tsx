@@ -15,6 +15,8 @@ interface VehiculeFormState {
   centre: string;
 }
 
+const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
+
 const ZONES_FIXES = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE"] as const;
 
 const initialFormState: VehiculeFormState = {
@@ -61,7 +63,7 @@ export default function VehiculePage() {
 
   function openEditModal(item: Vehicule) {
     setEditingVehicule(item);
-    const isKnownZone = (ZONES_FIXES as readonly string[]).includes(item.zone);
+    const isKnownZone = (ZONES_FIXES as readonly string[]).map(normalizeZone).includes(normalizeZone(item.zone));
     setForm({
       vehicule: item.vehicule,
       matricule: item.matricule,

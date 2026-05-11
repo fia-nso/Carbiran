@@ -10,6 +10,7 @@ interface VehiculeRow {
   utilisation_affectation: string;
   chauffeur_responsable?: string | null;
   zone: string;
+  centre?: string | null;
 }
 
 interface RavitaillementVehiculeRow {
@@ -42,6 +43,7 @@ function mapVehiculeRow(row: VehiculeRow): Vehicule {
     utilisationAffectation: row.utilisation_affectation,
     chauffeurResponsable: row.chauffeur_responsable,
     zone: row.zone,
+    centre: row.centre,
   };
 }
 
@@ -87,7 +89,7 @@ export function useRavitaillementsVehicule() {
       const { data, error } = await supabase
         .from("ravitaillements_vehicules")
         .select(
-          "id, date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter, created_at, updated_at, vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone)"
+          "id, date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter, created_at, updated_at, vehicule:vehicules(id, vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre)"
         )
         .order("date", { ascending: false, nullsFirst: false })
         .order("id", { ascending: false });

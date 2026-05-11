@@ -42,6 +42,8 @@ interface ActionIconButtonProps {
   disabled?: boolean;
 }
 
+const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
+
 const initialFormState: RavitaillementFormState = {
   date: "",
   vehiculeId: "",
@@ -488,8 +490,9 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const zones = [...new Set(selectedRavitaillements.map((item) => item.vehicule?.zone).filter(Boolean))];
-    if (zones.length > 1) {
+    const allZones = selectedRavitaillements.map((item) => item.vehicule?.zone).filter(Boolean) as string[];
+    const uniqueNormalizedZones = new Set(allZones.map(normalizeZone));
+    if (uniqueNormalizedZones.size > 1) {
       alert("Veuillez sélectionner des ravitaillements de la même zone.");
       return;
     }
@@ -501,8 +504,8 @@ export default function RavitaillementVehiculePage() {
     }
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
-    const zone = zones[0] ?? "—";
-    const isCdpe = zone.toUpperCase().includes("CDPE");
+    const zone = allZones[0] ?? "—";
+    const isCdpe = normalizeZone(zone).includes("cdpe");
     const today = new Date().toLocaleDateString("fr-FR");
     const zoomLevel = Math.min(100, Math.round(1400 / selectedRavitaillements.length)) + "%";
     const tableFontSize = Math.min(11, Math.round(200 / selectedRavitaillements.length));
@@ -622,7 +625,7 @@ export default function RavitaillementVehiculePage() {
 
     function bonHtml(item: (typeof selectedRavitaillements)[0], num: number) {
       const itemZone = item.vehicule?.zone ?? "";
-      const itemIsCdpe = itemZone.toUpperCase().includes("CDPE");
+      const itemIsCdpe = normalizeZone(itemZone).includes("cdpe");
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
@@ -680,7 +683,7 @@ export default function RavitaillementVehiculePage() {
                 <div class="bon-sig-space"></div>
               </div>
               <div class="bon-sig">
-                <p class="bon-sig-title">Chef Cellule CSÉ</p>
+                <p class="bon-sig-title">VISA Chef Cellule CSÉ</p>
                 <div class="bon-sig-space"></div>
               </div>
               <div class="bon-sig">
