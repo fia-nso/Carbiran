@@ -137,7 +137,7 @@ export default function VehiculePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -211,7 +211,8 @@ export default function VehiculePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-green-50 to-teal-100 border-b border-green-200">
                 <tr>
@@ -309,6 +310,83 @@ export default function VehiculePage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden">
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500" />
+                <span className="ml-3 text-gray-600">Chargement des vehicules...</span>
+              </div>
+            ) : vehicules.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                <h3 className="text-lg font-medium text-gray-900">Aucun vehicule</h3>
+                <p className="mt-1 text-gray-500 text-sm">
+                  {isViewer
+                    ? "Aucun vehicule disponible pour le moment."
+                    : "Commencez par ajouter votre premier vehicule."}
+                </p>
+                {!isViewer && (
+                  <button
+                    onClick={openAddModal}
+                    className="mt-4 inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-green-500 to-teal-600"
+                  >
+                    Ajouter un vehicule
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {vehicules.map((item) => (
+                  <div key={item.id} className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 truncate">{item.vehicule}</p>
+                        <p className="text-sm text-gray-500">{item.matricule}</p>
+                      </div>
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800 border border-teal-200 flex-shrink-0">
+                        {item.zone}
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-600 truncate">
+                        <span className="font-medium text-gray-700">Affectation : </span>
+                        {item.utilisationAffectation}
+                      </p>
+                      {item.chauffeurResponsable && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium text-gray-700">Chauffeur : </span>
+                          {item.chauffeurResponsable}
+                        </p>
+                      )}
+                      {item.centre && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium text-gray-700">Centre : </span>
+                          {item.centre}
+                        </p>
+                      )}
+                    </div>
+                    {!isViewer && (
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="flex-1 min-h-[44px] py-2.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="flex-1 min-h-[44px] py-2.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

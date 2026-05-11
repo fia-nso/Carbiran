@@ -532,12 +532,12 @@ export default function RavitaillementVehiculePage() {
     const signaturesHtml = isCdpe
       ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Cellule CSÉ</p><div class="sig-space"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
 
     printWindow.document.write(`
@@ -677,6 +677,10 @@ export default function RavitaillementVehiculePage() {
             <div class="bon-signatures">
               <div class="bon-sig">
                 <p class="bon-sig-title">Signature Chef Département</p>
+                <div class="bon-sig-space"></div>
+              </div>
+              <div class="bon-sig">
+                <p class="bon-sig-title">Chef Cellule CSÉ</p>
                 <div class="bon-sig-space"></div>
               </div>
               <div class="bon-sig">
@@ -825,7 +829,7 @@ export default function RavitaillementVehiculePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -915,7 +919,7 @@ export default function RavitaillementVehiculePage() {
                 type="button"
                 onClick={toggleSelectAllDisplayed}
                 disabled={displayedRavitaillements.length === 0}
-                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm"
               >
                 {isAllDisplayedSelected ? "Tout deselectionner" : "Selectionner les resultats"}
               </button>
@@ -923,7 +927,7 @@ export default function RavitaillementVehiculePage() {
                 type="button"
                 onClick={clearSelection}
                 disabled={selectedRavitaillements.length === 0}
-                className="px-4 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-sm"
               >
                 Vider la selection
               </button>
@@ -931,7 +935,7 @@ export default function RavitaillementVehiculePage() {
                 type="button"
                 onClick={handlePrintSelection}
                 disabled={selectedRavitaillements.length === 0}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-teal-600 text-white hover:from-green-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-teal-600 text-white hover:from-green-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg text-sm"
               >
                 Imprimer la selection
               </button>
@@ -939,7 +943,7 @@ export default function RavitaillementVehiculePage() {
                 type="button"
                 onClick={handlePrintSituation}
                 disabled={selectedRavitaillements.length === 0}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg text-sm"
               >
                 Imprimer Situation
               </button>
@@ -947,7 +951,7 @@ export default function RavitaillementVehiculePage() {
                 type="button"
                 onClick={handlePrintBon}
                 disabled={selectedRavitaillements.length === 0}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg text-sm"
               >
                 Imprimer Bon
               </button>

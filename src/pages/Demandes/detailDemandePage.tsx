@@ -146,18 +146,18 @@ const DETAIL_SELECT = `
 // ---------------------------------------------------------------------------
 
 const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
-  en_attente:      { label: "En attente",        classes: "bg-orange-100 text-orange-800 border-orange-200" },
-  validee_dept:    { label: "Validée (Dept.)",    classes: "bg-blue-100 text-blue-800 border-blue-200" },
-  validee_station: { label: "Validée (Station)",  classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule: { label: "Validée (Cellule)",  classes: "bg-green-100 text-green-800 border-green-200" },
-  annulee:         { label: "Annulée",            classes: "bg-red-100 text-red-800 border-red-200" },
+  en_attente:      { label: "En attente de validation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
+  validee_dept:    { label: "Approuvée par le département", classes: "bg-blue-100 text-blue-800 border-blue-200" },
+  validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
+  validee_cellule: { label: "Validée par la Cellule CSÉ",  classes: "bg-green-100 text-green-800 border-green-200" },
+  annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
 const DV_STATUT: Record<string, { label: string; classes: string }> = {
-  en_attente: { label: "En attente", classes: "bg-orange-100 text-orange-700" },
-  ravitaille: { label: "Ravitaillé", classes: "bg-blue-100 text-blue-700" },
-  valide:     { label: "Validé",     classes: "bg-green-100 text-green-700" },
-  refuse:     { label: "Refusé",     classes: "bg-red-100 text-red-700" },
+  en_attente: { label: "En attente de validation", classes: "bg-orange-100 text-orange-700" },
+  ravitaille: { label: "Ravitaillé",               classes: "bg-blue-100 text-blue-700" },
+  valide:     { label: "Validé",                   classes: "bg-green-100 text-green-700" },
+  refuse:     { label: "Refusé",                   classes: "bg-red-100 text-red-700" },
 };
 
 function StatutBadge({ statut }: { statut: StatutDemande }) {
@@ -744,7 +744,7 @@ export default function DetailDemandePage() {
   // -------------------------------------------------------------------------
 
   return (
-    <div className="max-w-4xl mx-auto py-6 space-y-6">
+    <div className="max-w-4xl mx-auto py-4 sm:py-6 px-4 sm:px-0 space-y-6">
       {/* Back + header */}
       <div className="bg-white rounded-2xl shadow border border-gray-200 p-6">
         <div className="flex items-start gap-3 mb-4">
@@ -771,20 +771,20 @@ export default function DetailDemandePage() {
         </div>
 
         {/* Action bar */}
-        <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-100">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4 border-t border-gray-100">
           {isChefDept && demande.statut === "en_attente" && (
             <>
               <button
                 onClick={handleValiderDept}
                 disabled={processing === "valider_dept"}
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
               >
                 {processing === "valider_dept" ? "Validation…" : "Valider la demande"}
               </button>
               <button
                 onClick={handleAnnuler}
                 disabled={processing === "annuler"}
-                className="px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
               >
                 {processing === "annuler" ? "Annulation…" : "Annuler la demande"}
               </button>
@@ -795,7 +795,7 @@ export default function DetailDemandePage() {
             <>
               <button
                 onClick={handlePrintSituation}
-                className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -804,7 +804,7 @@ export default function DetailDemandePage() {
               </button>
               <button
                 onClick={handlePrintBon}
-                className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -907,7 +907,6 @@ function VehiculeCard({
   const canEnvoyer =
     ravForm != null &&
     !!ravForm.montant &&
-    !!ravForm.n_liter &&
     Object.values(ravForm.photos).some(Boolean);
 
   const vehiculeLabel = vehiculeInfo
@@ -953,7 +952,7 @@ function VehiculeCard({
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
             Photos justificatives
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).map((type) => {
               const photo = photos?.find((p) => p.type === type);
               return (
@@ -986,18 +985,18 @@ function VehiculeCard({
 
       {/* Cellule — valider / refuser par véhicule */}
       {showCelluleActions && (
-        <div className="px-6 py-4 flex gap-3 border-b border-gray-100">
+        <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row gap-3 border-b border-gray-100">
           <button
             onClick={onValider}
             disabled={isValidating || isRefusing}
-            className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50"
           >
             {isValidating ? "Validation…" : "Valider ce véhicule"}
           </button>
           <button
             onClick={onRefuser}
             disabled={isValidating || isRefusing}
-            className="px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
           >
             {isRefusing ? "Refus…" : "Refuser ce véhicule"}
           </button>
@@ -1046,12 +1045,12 @@ function VehiculeCard({
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="pt-2">
             <button
               onClick={onEnvoyer}
               disabled={isSaving || !canEnvoyer}
-              title={!canEnvoyer ? "Saisissez le montant, les litres et au moins une photo" : undefined}
-              className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!canEnvoyer ? "Saisissez le montant et au moins une photo" : undefined}
+              className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? "Envoi en cours…" : "Envoyer ce ravitaillement"}
             </button>

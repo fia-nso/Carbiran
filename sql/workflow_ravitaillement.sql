@@ -411,4 +411,18 @@ with check (
   and public.is_responsable_station()
 );
 
+-- =========================================================
+-- 12. Mise à jour de la contrainte départements
+--     Ajout de 'RX&SYS', 'DC' et 'Autre' (et maintien de 'RS'
+--     pour compatibilité avec les données existantes)
+-- =========================================================
+
+alter table public.demandes_ravitaillement
+  drop constraint if exists demandes_rav_departement_valid;
+
+alter table public.demandes_ravitaillement
+  add constraint demandes_rav_departement_valid check (
+    departement in ('Zone A', 'Zone B', 'RS', 'RX&SYS', 'FO', 'CDPE', 'DC', 'Autre')
+  );
+
 commit;

@@ -5,11 +5,11 @@ import { useDemandes } from "@/hooks/useDemandes";
 import type { StatutDemande } from "@/types";
 
 const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
-  en_attente:      { label: "En attente",        classes: "bg-orange-100 text-orange-800 border-orange-200" },
-  validee_dept:    { label: "Validée (Dept.)",    classes: "bg-blue-100 text-blue-800 border-blue-200" },
-  validee_station: { label: "Validée (Station)",  classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule: { label: "Validée (Cellule)",  classes: "bg-green-100 text-green-800 border-green-200" },
-  annulee:         { label: "Annulée",            classes: "bg-red-100 text-red-800 border-red-200" },
+  en_attente:      { label: "En attente de validation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
+  validee_dept:    { label: "Approuvée par le département", classes: "bg-blue-100 text-blue-800 border-blue-200" },
+  validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
+  validee_cellule: { label: "Validée par la Cellule CSÉ",  classes: "bg-green-100 text-green-800 border-green-200" },
+  annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
 function StatutBadge({ statut }: { statut: StatutDemande }) {
@@ -34,18 +34,18 @@ export default function DemandesPage() {
   const validees    = demandes.filter((d) => d.statut === "validee_cellule").length;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 py-6">
+    <div className="max-w-7xl mx-auto space-y-6 py-4 sm:py-6 px-4 sm:px-6 lg:px-0">
       {/* Header */}
       <div className="bg-white rounded-2xl shadow border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Demandes de ravitaillement</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Demandes de ravitaillement</h1>
             <p className="text-gray-500 text-sm mt-1">Suivi des demandes selon votre rôle.</p>
           </div>
           {isChefDeCours && (
             <Link
               to="/demandes/nouvelle"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white px-5 py-2.5 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white px-5 py-3 min-h-[44px] rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm w-full sm:w-auto"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -55,7 +55,7 @@ export default function DemandesPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{total}</p>

@@ -4,8 +4,15 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useVehicules } from "@/hooks/useVehicule";
 
-const DEPARTEMENTS = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE"] as const;
+const DEPARTEMENTS = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE", "DC", "Autre"] as const;
 type Departement = typeof DEPARTEMENTS[number];
+
+const DEPT_LABELS: Partial<Record<Departement, string>> = {
+  "DC":    "Direction Commerciale (DC)",
+  "Autre": "Autre département",
+};
+
+const KNOWN_DEPT_ZONES: readonly string[] = ["Zone A", "Zone B", "RX&SYS", "FO", "CDPE", "DC"];
 
 export default function NouvelleDemandePage() {
   const { user } = useAuthContext();
@@ -33,7 +40,11 @@ export default function NouvelleDemandePage() {
   const vehiculesDept = useMemo(
     () =>
       allVehicules.filter((v) => {
-        if (v.zone !== departement) return false;
+        const zoneMatch =
+          departement === "Autre"
+            ? !KNOWN_DEPT_ZONES.includes(v.zone)
+            : v.zone === departement;
+        if (!zoneMatch) return false;
         if (user?.role === "chef_de_cours" && v.centre !== "NKTT") return false;
         return true;
       }),
@@ -98,7 +109,7 @@ export default function NouvelleDemandePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-6 space-y-6">
+    <div className="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0 pb-28 sm:pb-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
@@ -132,7 +143,7 @@ export default function NouvelleDemandePage() {
                     : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                 }`}
               >
-                {dept}
+                {DEPT_LABELS[dept] ?? dept}
               </button>
             ))}
           </div>
@@ -187,7 +198,7 @@ export default function NouvelleDemandePage() {
               {vehiculesFiltres.map((v) => (
                 <label
                   key={v.id}
-                  className={`flex items-center gap-4 px-6 py-4 cursor-pointer transition-colors ${
+                  className={`flex items-center gap-4 px-4 sm:px-6 min-h-[44px] py-3 cursor-pointer transition-colors ${
                     selected.has(v.id) ? "bg-teal-50" : "hover:bg-gray-50"
                   }`}
                 >
@@ -195,7 +206,7 @@ export default function NouvelleDemandePage() {
                     type="checkbox"
                     checked={selected.has(v.id)}
                     onChange={() => toggleVehicule(v.id)}
-                    className="w-4 h-4 rounded text-teal-600 border-gray-300 focus:ring-teal-500"
+                    className="w-5 h-5 rounded text-teal-600 border-gray-300 focus:ring-teal-500 flex-shrink-0"
                   />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-gray-900 truncate">{v.vehicule}</p>
@@ -221,22 +232,24 @@ export default function NouvelleDemandePage() {
           </p>
         )}
 
-        <div className="flex gap-3">
-          <Link
-            to="/demandes"
-            className="flex-1 text-center px-5 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm"
-          >
-            Annuler
-          </Link>
-          <button
-            type="submit"
-            disabled={submitting || selected.size === 0}
-            className="flex-1 px-5 py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting
-              ? "Envoi en cours..."
-              : `Envoyer la demande${selected.size > 0 ? ` (${selected.size})` : ""}`}
-          </button>
+        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-4 sm:static sm:bg-transparent sm:border-0 sm:p-0 sm:backdrop-blur-none">
+          <div className="max-w-2xl mx-auto flex gap-3">
+            <Link
+              to="/demandes"
+              className="flex-1 text-center px-5 py-3 min-h-[44px] flex items-center justify-center border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm"
+            >
+              Annuler
+            </Link>
+            <button
+              type="submit"
+              disabled={submitting || selected.size === 0}
+              className="flex-1 px-5 py-3 min-h-[44px] bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting
+                ? "Envoi en cours..."
+                : `Envoyer la demande${selected.size > 0 ? ` (${selected.size})` : ""}`}
+            </button>
+          </div>
         </div>
       </form>
     </div>

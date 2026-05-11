@@ -134,16 +134,16 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-orange-50 p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-4 sm:p-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-r from-green-500 to-teal-600 rounded-xl shadow-lg">
+              <div className="p-3 bg-gradient-to-r from-green-500 to-teal-600 rounded-xl shadow-lg flex-shrink-0">
                 <span className="text-2xl">D</span>
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
                 <p className="text-gray-600 mt-1">
                   Synthese mensuelle des ravitaillements, des montants, des litres et du kilometrage.
                 </p>
