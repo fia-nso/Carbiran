@@ -148,15 +148,15 @@ const DETAIL_SELECT = `
 // ---------------------------------------------------------------------------
 
 const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
-  en_attente:      { label: "En attente de validation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
-  validee_dept:    { label: "Approuvée par le département", classes: "bg-blue-100 text-blue-800 border-blue-200" },
+  en_attente:      { label: "En attente d'approbation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
+  validee_dept:    { label: "Approuvée",                   classes: "bg-blue-100 text-blue-800 border-blue-200" },
   validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
   validee_cellule: { label: "Validée",                     classes: "bg-green-100 text-green-800 border-green-200" },
   annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
 const DV_STATUT: Record<string, { label: string; classes: string }> = {
-  en_attente: { label: "En attente de validation", classes: "bg-orange-100 text-orange-700" },
+  en_attente: { label: "En attente d'approbation", classes: "bg-orange-100 text-orange-700" },
   ravitaille: { label: "Ravitaillé",               classes: "bg-blue-100 text-blue-700" },
   valide:     { label: "Validé",                   classes: "bg-green-100 text-green-700" },
   refuse:     { label: "Refusé",                   classes: "bg-red-100 text-red-700" },
@@ -843,7 +843,7 @@ export default function DetailDemandePage() {
                 disabled={processing === "valider_dept"}
                 className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
               >
-                {processing === "valider_dept" ? "Validation…" : "Valider la demande"}
+                {processing === "valider_dept" ? "Approbation…" : "Approuver la demande"}
               </button>
               <button
                 onClick={handleAnnuler}
