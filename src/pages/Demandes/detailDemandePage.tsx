@@ -917,6 +917,7 @@ export default function DetailDemandePage() {
             isStationViewer={isStationViewer}
             isCellule={isCellule}
             isChefDept={isChefDept}
+            isChefDeCours={isChefDeCours}
             vehiculeInfo={vehiculesMap[dv.vehicule_id]}
             photos={photosMap[dv.id]}
             ravForm={ravForms[dv.id]}
@@ -948,6 +949,7 @@ interface VehiculeCardProps {
   isStationViewer: boolean;
   isCellule: boolean;
   isChefDept: boolean;
+  isChefDeCours: boolean;
   vehiculeInfo?: VehiculeInfo;
   photos?: PhotoJustification[];
   ravForm: RavForm | undefined;
@@ -968,6 +970,7 @@ function VehiculeCard({
   isStationViewer,
   isCellule,
   isChefDept,
+  isChefDeCours,
   vehiculeInfo,
   photos,
   ravForm,
@@ -981,8 +984,8 @@ function VehiculeCard({
   onRetourner,
 }: VehiculeCardProps) {
   const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts        = (isCellule || isChefDept || isStationViewer) && dv.statut !== "en_attente";
-  const showPhotos         = (isCellule || isStationViewer) && (photos?.length ?? 0) > 0;
+  const showAmounts        = (isCellule || isChefDept || isStationViewer || isChefDeCours) && dv.statut !== "en_attente";
+  const showPhotos         = (isCellule || isStationViewer || isChefDeCours) && (photos?.length ?? 0) > 0;
   const showCelluleActions = isCellule && dv.statut === "ravitaille";
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
