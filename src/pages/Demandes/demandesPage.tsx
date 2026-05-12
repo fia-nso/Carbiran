@@ -8,7 +8,7 @@ const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> =
   en_attente:      { label: "En attente de validation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
   validee_dept:    { label: "Approuvée par le département", classes: "bg-blue-100 text-blue-800 border-blue-200" },
   validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule: { label: "Validée par la Cellule CSÉ",  classes: "bg-green-100 text-green-800 border-green-200" },
+  validee_cellule: { label: "Validée",                     classes: "bg-green-100 text-green-800 border-green-200" },
   annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
@@ -29,13 +29,24 @@ export default function DemandesPage() {
 
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
-  const total     = demandes.length;
-  const enAttente = demandes.filter((d) => d.statut === "en_attente").length;
-  const validees  = demandes.filter(
-    (d) =>
-      d.statut === "validee_cellule" ||
-      (d.demande_vehicules ?? []).some((dv) => dv.statut === "valide")
-  ).length;
+  const total = demandes.length;
+
+  const STATUT_ORDER: StatutDemande[] = [
+    "en_attente",
+    "validee_dept",
+    "validee_station",
+    "validee_cellule",
+    "annulee",
+  ];
+
+  const statutCounts = STATUT_ORDER.reduce<Partial<Record<StatutDemande, number>>>(
+    (acc, s) => {
+      const n = demandes.filter((d) => d.statut === s).length;
+      if (n > 0) acc[s] = n;
+      return acc;
+    },
+    {}
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 py-4 sm:py-6 px-4 sm:px-6 lg:px-0">
@@ -59,19 +70,22 @@ export default function DemandesPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+        <div className="flex flex-wrap gap-3 mt-6">
+          <div className="flex-1 min-w-[120px] bg-gray-50 rounded-xl p-4 border border-gray-200">
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{total}</p>
           </div>
-          <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
-            <p className="text-xs text-orange-600 font-medium uppercase tracking-wider">En attente</p>
-            <p className="text-2xl font-bold text-orange-900 mt-1">{enAttente}</p>
-          </div>
-          <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-            <p className="text-xs text-green-600 font-medium uppercase tracking-wider">Validées</p>
-            <p className="text-2xl font-bold text-green-900 mt-1">{validees}</p>
-          </div>
+          {STATUT_ORDER.map((statut) => {
+            const n = statutCounts[statut];
+            if (!n) return null;
+            const cfg = STATUT_CONFIG[statut];
+            return (
+              <div key={statut} className={`flex-1 min-w-[140px] rounded-xl p-4 border ${cfg.classes}`}>
+                <p className="text-xs font-medium uppercase tracking-wider opacity-80">{cfg.label}</p>
+                <p className="text-2xl font-bold mt-1">{n}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 

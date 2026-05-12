@@ -151,7 +151,7 @@ const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> =
   en_attente:      { label: "En attente de validation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
   validee_dept:    { label: "Approuvée par le département", classes: "bg-blue-100 text-blue-800 border-blue-200" },
   validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule: { label: "Validée par la Cellule CSÉ",  classes: "bg-green-100 text-green-800 border-green-200" },
+  validee_cellule: { label: "Validée",                     classes: "bg-green-100 text-green-800 border-green-200" },
   annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
