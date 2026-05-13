@@ -2,15 +2,8 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
-import type { StatutDemande } from "@/types";
+import type { DemandeRavitaillement, DemandeVehicule } from "@/types";
 
-const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
-  en_attente:      { label: "En attente d'approbation",    classes: "bg-orange-100 text-orange-800 border-orange-200" },
-  validee_dept:    { label: "Approuvée",                   classes: "bg-blue-100 text-blue-800 border-blue-200" },
-  validee_station: { label: "Ravitaillement effectué",     classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule: { label: "Validée",                     classes: "bg-green-100 text-green-800 border-green-200" },
-  annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
-};
 
 const VEHICULE_STATUT_CARDS = [
   { key: "en_attente_demande", label: "En attente d'approbation", classes: "bg-orange-100 text-orange-800 border-orange-200" },
@@ -20,13 +13,54 @@ const VEHICULE_STATUT_CARDS = [
   { key: "refuse",             label: "Retournée",                 classes: "bg-red-100 text-red-800 border-red-200" },
 ] as const;
 
-function StatutBadge({ statut }: { statut: StatutDemande }) {
-  const cfg = STATUT_CONFIG[statut];
+function getDvStats(dvs: DemandeVehicule[] | undefined) {
+  const list = dvs ?? [];
+  return {
+    total:      list.length,
+    enAttente:  list.filter((v) => v.statut === "en_attente").length,
+    ravitaille: list.filter((v) => v.statut === "ravitaille").length,
+    valide:     list.filter((v) => v.statut === "valide").length,
+  };
+}
+
+function SmartStatutBadge({ d }: { d: DemandeRavitaillement }) {
+  const { total, ravitaille, valide } = getDvStats(d.demande_vehicules);
+
+  let label: string;
+  let classes: string;
+
+  if (d.statut === "annulee") {
+    label = "Annulée";
+    classes = "bg-red-100 text-red-800 border-red-200";
+  } else if (valide > 0) {
+    label = `Validée (${valide}/${total})`;
+    classes = "bg-green-100 text-green-800 border-green-200";
+  } else if (ravitaille > 0) {
+    label = `Ravitaillement effectué (${ravitaille}/${total})`;
+    classes = "bg-purple-100 text-purple-800 border-purple-200";
+  } else if (d.statut === "validee_dept" || d.statut === "validee_station") {
+    label = "Approuvée";
+    classes = "bg-blue-100 text-blue-800 border-blue-200";
+  } else {
+    label = "En attente d'approbation";
+    classes = "bg-orange-100 text-orange-800 border-orange-200";
+  }
+
   return (
-    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${cfg.classes}`}>
-      {cfg.label}
+    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${classes}`}>
+      {label}
     </span>
   );
+}
+
+function DvDetailLine({ dvs }: { dvs: DemandeVehicule[] | undefined }) {
+  const { enAttente, ravitaille, valide } = getDvStats(dvs);
+  const parts: string[] = [];
+  if (enAttente > 0)  parts.push(`⏳ ${enAttente} en attente`);
+  if (ravitaille > 0) parts.push(`🔄 ${ravitaille} ravitaillé${ravitaille > 1 ? "s" : ""}`);
+  if (valide > 0)     parts.push(`✅ ${valide} validé${valide > 1 ? "s" : ""}`);
+  if (parts.length === 0) return null;
+  return <p className="text-xs text-gray-500 mt-0.5">{parts.join(" · ")}</p>;
 }
 
 export default function DemandesPage() {
@@ -119,7 +153,7 @@ export default function DemandesPage() {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-green-50 to-teal-50 border-b border-gray-200">
                   <tr>
-                    {["Département", "Date", "Statut", "Véhicules", ""].map((h) => (
+                    {["Département", "Date", "Statut", "Détail véhicules", ""].map((h) => (
                       <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider last:text-right">
                         {h}
                       </th>
@@ -134,10 +168,10 @@ export default function DemandesPage() {
                         {new Date(d.created_at).toLocaleDateString("fr-FR")}
                       </td>
                       <td className="px-6 py-4">
-                        <StatutBadge statut={d.statut} />
+                        <SmartStatutBadge d={d} />
                       </td>
-                      <td className="px-6 py-4 text-gray-600 text-sm">
-                        {d.demande_vehicules?.length ?? 0} véhicule(s)
+                      <td className="px-6 py-4">
+                        <DvDetailLine dvs={d.demande_vehicules} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
@@ -168,8 +202,9 @@ export default function DemandesPage() {
                       {" · "}
                       {d.demande_vehicules?.length ?? 0} véhicule(s)
                     </p>
+                    <DvDetailLine dvs={d.demande_vehicules} />
                   </div>
-                  <StatutBadge statut={d.statut} />
+                  <SmartStatutBadge d={d} />
                 </Link>
               ))}
             </div>
