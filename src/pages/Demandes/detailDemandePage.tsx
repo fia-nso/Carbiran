@@ -1309,21 +1309,33 @@ function PhotoInput({
 // ---------------------------------------------------------------------------
 
 function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  // Keyboard: Escape ferme
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Android back button: pousse un état history pour intercepter le retour
+  useEffect(() => {
+    window.history.pushState({ photo: true }, "");
+    const handlePop = () => onClose();
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [onClose]);
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+      className="fixed inset-0 bg-black/90 flex items-center justify-center"
+      style={{ zIndex: 9998 }}
       onClick={onClose}
     >
+      {/* Bouton X — fixed pour rester visible même si l'image est grande */}
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white"
+        className="fixed top-2.5 right-2.5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:bg-white/50 transition-colors text-white"
+        style={{ zIndex: 9999, width: 44, height: 44 }}
         aria-label="Fermer"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1333,8 +1345,8 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
       <img
         src={url}
         alt="Photo agrandie"
-        className="max-w-full max-h-full object-contain select-none"
-        style={{ touchAction: "pinch-zoom" }}
+        className="max-w-full max-h-full object-contain"
+        style={{ touchAction: "pinch-zoom", userSelect: "none", transform: "scale(1)" }}
         onClick={(e) => e.stopPropagation()}
       />
     </div>

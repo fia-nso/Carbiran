@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
 import type { Notification } from "@/types";
 
-const REFRESH_INTERVAL_MS = 30_000;
 const MAX_DISPLAYED = 20;
 
 export default function NotificationBell() {
@@ -13,6 +12,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
   // Fetch
@@ -31,12 +31,29 @@ export default function NotificationBell() {
     setInitialLoading(false);
   }, []);
 
-  // Initial load + 30-second polling
+  // Resolve current user ID once
   useEffect(() => {
-    void load();
-    const interval = setInterval(() => void load(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [load]);
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, []);
+
+  // Initial load
+  useEffect(() => { void load(); }, [load]);
+
+  // Realtime — écoute les nouvelles notifications de l'utilisateur courant
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel("notifications-changes")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        () => { void load(); }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [userId, load]);
 
   // Close on click outside
   useEffect(() => {
