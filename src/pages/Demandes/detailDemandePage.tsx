@@ -563,8 +563,10 @@ export default function DetailDemandePage() {
             .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 56px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { size: A4 landscape; margin: 0; }
-              body { font-size: 11px; }
+              @page { size: A4 landscape; margin: 0mm; }
+              body { margin: 10mm; padding: 0; width: calc(297mm - 20mm); box-sizing: border-box; font-size: 11px; }
+              table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+              td, th { overflow: hidden; text-overflow: ellipsis; word-wrap: break-word; padding: 4px 6px; }
               thead { display: table-header-group; }
               tr { page-break-inside: avoid; }
             }
@@ -732,9 +734,9 @@ export default function DetailDemandePage() {
           <style>
             * { box-sizing: border-box; }
             body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 0; }
-            .page { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
+            .page { width: 100%; height: calc(297mm - 20mm); display: flex; flex-direction: column; overflow: hidden; }
             .page-break { page-break-after: always; }
-            .bon { height: 148.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
+            .bon { height: 138.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
             .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
             .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
@@ -751,7 +753,8 @@ export default function DetailDemandePage() {
             .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
             .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { margin: 0; size: A4 portrait; }
+              @page { size: A4 portrait; margin: 0mm; }
+              body { margin: 10mm; padding: 0; }
             }
           </style>
         </head>
@@ -983,9 +986,12 @@ function VehiculeCard({
   onRefuser,
   onRetourner,
 }: VehiculeCardProps) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const showStationSent    = isStation && dv.statut === "ravitaille";
   const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts        = (isCellule || isChefDept || isStationViewer || isChefDeCours) && dv.statut !== "en_attente";
-  const showPhotos         = (isCellule || isStationViewer || isChefDeCours) && (photos?.length ?? 0) > 0;
+  const showAmounts        = (isCellule || isChefDept || isStationViewer || isChefDeCours || showStationSent) && dv.statut !== "en_attente";
+  const showPhotos         = (isCellule || isStationViewer || isChefDeCours || showStationSent) && (photos?.length ?? 0) > 0;
   const showCelluleActions = isCellule && dv.statut === "ravitaille";
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
@@ -1008,6 +1014,8 @@ function VehiculeCard({
 
   return (
     <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+      {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
         <div className="min-w-0">
@@ -1026,7 +1034,17 @@ function VehiculeCard({
         </div>
       )}
 
-      {/* Amounts (cellule / chef after ravitaillement) */}
+      {/* Badge envoyé — station après envoi */}
+      {showStationSent && (
+        <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span className="text-sm font-medium text-blue-700">Envoyé — en attente de validation</span>
+        </div>
+      )}
+
+      {/* Amounts (cellule / chef / station après envoi) */}
       {showAmounts && (dv.montant != null || dv.n_liter != null || dv.kilometrage != null) && (
         <div className="px-6 py-4 grid grid-cols-3 gap-4 bg-gray-50 border-b border-gray-100">
           <AmountCell label="Montant" value={dv.montant} unit="MRU" />
@@ -1035,7 +1053,7 @@ function VehiculeCard({
         </div>
       )}
 
-      {/* Photos (cellule only) */}
+      {/* Photos lecture seule (cellule / viewer / chef / station après envoi) */}
       {showPhotos && (
         <div className="px-6 py-4 border-b border-gray-100">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -1047,18 +1065,17 @@ function VehiculeCard({
               return (
                 <div key={type} className="space-y-1">
                   {photo ? (
-                    <a
-                      href={photo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block rounded-xl overflow-hidden border border-gray-200 hover:opacity-90 transition-opacity"
+                    <button
+                      type="button"
+                      onClick={() => setLightboxUrl(photo.url)}
+                      className="block w-full rounded-xl overflow-hidden border border-gray-200 hover:opacity-90 transition-opacity cursor-zoom-in"
                     >
                       <img
                         src={photo.url}
                         alt={PHOTO_LABELS[type]}
                         className="w-full h-32 object-cover"
                       />
-                    </a>
+                    </button>
                   ) : (
                     <div className="w-full h-32 rounded-xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
                       <span className="text-xs text-gray-400">Pas de photo</span>
@@ -1135,6 +1152,7 @@ function VehiculeCard({
               {(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).map((type) => (
                 <PhotoInput
                   key={type}
+                  dvId={dv.id}
                   type={type}
                   file={ravForm.photos[type] ?? null}
                   onChange={(file) => onUpdatePhoto(type, file)}
@@ -1207,53 +1225,107 @@ function NumericField({
 }
 
 function PhotoInput({
+  dvId,
   type,
   file,
   onChange,
 }: {
+  dvId: string;
   type: TypePhoto;
   file: File | null;
   onChange: (f: File | null) => void;
 }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const label      = PHOTO_LABELS[type];
   const previewUrl = file ? URL.createObjectURL(file) : null;
+  const inputId    = `photo-${dvId}-${type}`;
 
   return (
     <div>
+      {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <label
-        className={`flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden ${
-          file
-            ? "border-teal-400 bg-teal-50"
-            : "border-gray-300 bg-gray-50 hover:border-teal-400 hover:bg-teal-50"
-        }`}
-      >
-        {previewUrl ? (
-          <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
-        ) : (
+      {previewUrl ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(previewUrl)}
+            className="block w-full h-28 rounded-xl border border-teal-400 bg-teal-50 overflow-hidden cursor-zoom-in"
+          >
+            <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
+          </button>
+          <div className="flex mt-1">
+            <label
+              htmlFor={inputId}
+              className="flex-1 text-xs text-center text-teal-600 hover:text-teal-800 cursor-pointer"
+            >
+              Modifier
+            </label>
+            <button
+              type="button"
+              onClick={() => onChange(null)}
+              className="flex-1 text-xs text-center text-red-500 hover:text-red-700"
+            >
+              Supprimer
+            </button>
+          </div>
+        </>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className="flex flex-col items-center justify-center w-full h-28 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 hover:border-teal-400 hover:bg-teal-50 cursor-pointer transition-colors"
+        >
           <div className="flex flex-col items-center gap-1 text-gray-400">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span className="text-xs">Ajouter</span>
           </div>
-        )}
-        <input
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      {file && (
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          className="mt-1 text-xs text-red-500 hover:text-red-700 w-full text-center"
-        >
-          Supprimer
-        </button>
+        </label>
       )}
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lightbox
+// ---------------------------------------------------------------------------
+
+function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white"
+        aria-label="Fermer"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <img
+        src={url}
+        alt="Photo agrandie"
+        className="max-w-full max-h-full object-contain select-none"
+        style={{ touchAction: "pinch-zoom" }}
+        onClick={(e) => e.stopPropagation()}
+      />
     </div>
   );
 }

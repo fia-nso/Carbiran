@@ -389,14 +389,6 @@ export function useDemandes() {
         .eq("demande_vehicule_id", demandeVehiculeId);
       if (photoErr) console.error("retournerRavitaillement photo delete:", photoErr.message);
 
-      // If demande was already submitted to cellule (validee_station), revert it so
-      // the station can re-do the vehicle and re-submit via validerDemandeStation
-      await supabase
-        .from("demandes_ravitaillement")
-        .update({ statut: "validee_dept" })
-        .eq("id", demandeId)
-        .eq("statut", "validee_station");
-
       const msg = `Ravitaillement retourné pour correction${matricule ? ` : ${matricule}` : ""}`;
       void notifyByRoles(
         ["responsable_station", "responsable_station_viewer"],

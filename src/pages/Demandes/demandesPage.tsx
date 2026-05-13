@@ -12,6 +12,14 @@ const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> =
   annulee:         { label: "Annulée",                     classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
+const VEHICULE_STATUT_CARDS = [
+  { key: "en_attente_demande", label: "En attente d'approbation", classes: "bg-orange-100 text-orange-800 border-orange-200" },
+  { key: "approuvee",          label: "Approuvée",                 classes: "bg-blue-100 text-blue-800 border-blue-200" },
+  { key: "ravitaille",         label: "Ravitaillement effectué",   classes: "bg-purple-100 text-purple-800 border-purple-200" },
+  { key: "valide",             label: "Validée",                   classes: "bg-green-100 text-green-800 border-green-200" },
+  { key: "refuse",             label: "Retournée",                 classes: "bg-red-100 text-red-800 border-red-200" },
+] as const;
+
 function StatutBadge({ statut }: { statut: StatutDemande }) {
   const cfg = STATUT_CONFIG[statut];
   return (
@@ -29,24 +37,22 @@ export default function DemandesPage() {
 
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
-  const total = demandes.length;
+  const allVehicules = demandes.flatMap((d) => d.demande_vehicules ?? []);
+  const totalVehicules = allVehicules.length;
 
-  const STATUT_ORDER: StatutDemande[] = [
-    "en_attente",
-    "validee_dept",
-    "validee_station",
-    "validee_cellule",
-    "annulee",
-  ];
-
-  const statutCounts = STATUT_ORDER.reduce<Partial<Record<StatutDemande, number>>>(
-    (acc, s) => {
-      const n = demandes.filter((d) => d.statut === s).length;
-      if (n > 0) acc[s] = n;
-      return acc;
-    },
-    {}
-  );
+  const vehiculeCounts: Record<(typeof VEHICULE_STATUT_CARDS)[number]["key"], number> = {
+    en_attente_demande: demandes
+      .filter((d) => d.statut === "en_attente")
+      .flatMap((d) => d.demande_vehicules ?? [])
+      .length,
+    approuvee: demandes
+      .filter((d) => d.statut === "validee_dept")
+      .flatMap((d) => d.demande_vehicules ?? [])
+      .length,
+    ravitaille: allVehicules.filter((v) => v.statut === "ravitaille").length,
+    valide:     allVehicules.filter((v) => v.statut === "valide").length,
+    refuse:     allVehicules.filter((v) => v.statut === "refuse").length,
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 py-4 sm:py-6 px-4 sm:px-6 lg:px-0">
@@ -72,16 +78,15 @@ export default function DemandesPage() {
 
         <div className="flex flex-wrap gap-3 mt-6">
           <div className="flex-1 min-w-[120px] bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{total}</p>
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total véhicules</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{totalVehicules}</p>
           </div>
-          {STATUT_ORDER.map((statut) => {
-            const n = statutCounts[statut];
+          {VEHICULE_STATUT_CARDS.map(({ key, label, classes }) => {
+            const n = vehiculeCounts[key];
             if (!n) return null;
-            const cfg = STATUT_CONFIG[statut];
             return (
-              <div key={statut} className={`flex-1 min-w-[140px] rounded-xl p-4 border ${cfg.classes}`}>
-                <p className="text-xs font-medium uppercase tracking-wider opacity-80">{cfg.label}</p>
+              <div key={key} className={`flex-1 min-w-[140px] rounded-xl p-4 border ${classes}`}>
+                <p className="text-xs font-medium uppercase tracking-wider opacity-80">{label}</p>
                 <p className="text-2xl font-bold mt-1">{n}</p>
               </div>
             );

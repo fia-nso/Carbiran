@@ -573,8 +573,10 @@ export default function RavitaillementVehiculePage() {
             .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 56px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { size: A4 landscape; margin: 0; }
-              body { zoom: 100%; font-size: 11px; }
+              @page { size: A4 landscape; margin: 0mm; }
+              body { margin: 10mm; padding: 0; width: calc(297mm - 20mm); box-sizing: border-box; font-size: 11px; }
+              table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+              td, th { overflow: hidden; text-overflow: ellipsis; word-wrap: break-word; padding: 4px 6px; }
               thead { display: table-header-group; }
               tr { page-break-inside: avoid; }
             }
@@ -732,9 +734,9 @@ export default function RavitaillementVehiculePage() {
           <style>
             * { box-sizing: border-box; }
             body { font-family: Arial, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 0; }
-            .page { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
+            .page { width: 100%; height: calc(297mm - 20mm); display: flex; flex-direction: column; overflow: hidden; }
             .page-break { page-break-after: always; }
-            .bon { height: 148.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
+            .bon { height: 138.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
             .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
             .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
@@ -753,7 +755,8 @@ export default function RavitaillementVehiculePage() {
             .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
             .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
             @media print {
-              @page { margin: 0; size: A4 portrait; }
+              @page { size: A4 portrait; margin: 0mm; }
+              body { margin: 10mm; padding: 0; }
             }
           </style>
         </head>
