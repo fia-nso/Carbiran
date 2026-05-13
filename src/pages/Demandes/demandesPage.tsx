@@ -17,7 +17,7 @@ function getDvStats(dvs: DemandeVehicule[] | undefined) {
   const list = dvs ?? [];
   return {
     total:      list.length,
-    enAttente:  list.filter((v) => v.statut === "en_attente").length,
+    enAttente:  list.filter((v) => v.statut === "en_attente" || v.statut === "refuse").length,
     ravitaille: list.filter((v) => v.statut === "ravitaille").length,
     valide:     list.filter((v) => v.statut === "valide").length,
   };
@@ -56,8 +56,8 @@ function SmartStatutBadge({ d }: { d: DemandeRavitaillement }) {
 function DvDetailLine({ dvs }: { dvs: DemandeVehicule[] | undefined }) {
   const { enAttente, ravitaille, valide } = getDvStats(dvs);
   const parts: string[] = [];
-  if (enAttente > 0)  parts.push(`⏳ ${enAttente} en attente`);
-  if (ravitaille > 0) parts.push(`🔄 ${ravitaille} ravitaillé${ravitaille > 1 ? "s" : ""}`);
+  if (enAttente > 0)  parts.push(`⏳ ${enAttente} en attente de ravitaillement`);
+  if (ravitaille > 0) parts.push(`🔄 ${ravitaille} ravitaillement${ravitaille > 1 ? "s" : ""} effectué${ravitaille > 1 ? "s" : ""}`);
   if (valide > 0)     parts.push(`✅ ${valide} validé${valide > 1 ? "s" : ""}`);
   if (parts.length === 0) return null;
   return <p className="text-xs text-gray-500 mt-0.5">{parts.join(" · ")}</p>;

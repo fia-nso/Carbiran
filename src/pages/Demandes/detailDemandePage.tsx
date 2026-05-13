@@ -156,10 +156,10 @@ const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> =
 };
 
 const DV_STATUT: Record<string, { label: string; classes: string }> = {
-  en_attente: { label: "En attente d'approbation", classes: "bg-orange-100 text-orange-700" },
-  ravitaille: { label: "Ravitaillé",               classes: "bg-blue-100 text-blue-700" },
-  valide:     { label: "Validé",                   classes: "bg-green-100 text-green-700" },
-  refuse:     { label: "Refusé",                   classes: "bg-red-100 text-red-700" },
+  en_attente: { label: "En attente de ravitaillement", classes: "bg-orange-100 text-orange-700" },
+  ravitaille: { label: "Ravitaillement effectué",      classes: "bg-purple-100 text-purple-700" },
+  valide:     { label: "Validée",                      classes: "bg-green-100 text-green-700" },
+  refuse:     { label: "En attente de ravitaillement", classes: "bg-orange-100 text-orange-700" },
 };
 
 function StatutBadge({ statut }: { statut: StatutDemande }) {
