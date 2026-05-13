@@ -988,10 +988,11 @@ function VehiculeCard({
 }: VehiculeCardProps) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  const showStationSent    = isStation && dv.statut === "ravitaille";
-  const showForm           = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts        = (isCellule || isChefDept || isStationViewer || isChefDeCours || showStationSent) && dv.statut !== "en_attente";
-  const showPhotos         = (isCellule || isStationViewer || isChefDeCours || showStationSent) && (photos?.length ?? 0) > 0;
+  const showStationSent     = isStation && dv.statut === "ravitaille";
+  const showStationReadOnly = isStation && (dv.statut === "ravitaille" || dv.statut === "valide");
+  const showForm            = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
+  const showAmounts         = (isCellule || isChefDept || isStationViewer || isChefDeCours || showStationReadOnly) && dv.statut !== "en_attente";
+  const showPhotos          = (isCellule || isStationViewer || isChefDeCours || showStationReadOnly) && (photos?.length ?? 0) > 0;
   const showCelluleActions = isCellule && dv.statut === "ravitaille";
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
