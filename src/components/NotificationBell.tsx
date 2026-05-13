@@ -41,18 +41,28 @@ export default function NotificationBell() {
   // Initial load
   useEffect(() => { void load(); }, [load]);
 
-  // Realtime — écoute les nouvelles notifications de l'utilisateur courant
+  // Realtime — channel créé une seule fois par userId grâce au ref
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channelRef = useRef<any>(null);
+
   useEffect(() => {
-    if (!userId) return;
-    const channel = supabase
-      .channel("notifications-changes")
+    if (!userId || channelRef.current) return;
+
+    channelRef.current = supabase
+      .channel(`notifications-${userId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         () => { void load(); }
       )
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+
+    return () => {
+      if (channelRef.current) {
+        void supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [userId, load]);
 
   // Close on click outside
