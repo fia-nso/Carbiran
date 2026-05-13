@@ -272,16 +272,6 @@ export default function DetailDemandePage() {
 
   useEffect(() => { void fetchDemande(); }, [fetchDemande]);
 
-  useEffect(() => {
-    if (!id) return;
-    const channel = supabase
-      .channel(`demande-detail-${id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "demandes_ravitaillement", filter: `id=eq.${id}` }, () => { void fetchDemande(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "demande_vehicules",         filter: `demande_id=eq.${id}` }, () => { void fetchDemande(); })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [id, fetchDemande]);
-
   // -------------------------------------------------------------------------
   // Load vehicule info whenever demande changes
   // -------------------------------------------------------------------------

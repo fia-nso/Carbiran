@@ -83,17 +83,6 @@ export function useRavitaillementsVehicule() {
     void loadRavitaillements().catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("ravitaillements-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "ravitaillements_vehicules" }, () => {
-        void loadRavitaillements().catch(() => undefined);
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   async function loadRavitaillements() {
     setLoading(true);
     try {

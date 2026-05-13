@@ -12,8 +12,6 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
-
   // -------------------------------------------------------------------------
   // Fetch
   // -------------------------------------------------------------------------
@@ -31,39 +29,12 @@ export default function NotificationBell() {
     setInitialLoading(false);
   }, []);
 
-  // Resolve current user ID once
+  // Initial load + polling toutes les 30 secondes
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-    });
-  }, []);
-
-  // Initial load
-  useEffect(() => { void load(); }, [load]);
-
-  // Realtime — channel créé une seule fois par userId grâce au ref
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channelRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (!userId || channelRef.current) return;
-
-    channelRef.current = supabase
-      .channel(`notifications-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        () => { void load(); }
-      )
-      .subscribe();
-
-    return () => {
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [userId, load]);
+    void load();
+    const interval = setInterval(() => void load(), 30_000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   // Close on click outside
   useEffect(() => {
