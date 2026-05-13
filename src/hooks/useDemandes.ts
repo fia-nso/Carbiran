@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/supabaseClient";
 import { notifyByRole, notifyByRoleAndDept, notifyByRoles } from "@/lib/notifications";
 import type {
@@ -434,6 +434,19 @@ export function useDemandes() {
     },
     []
   );
+
+  // -------------------------------------------------------------------------
+  // Realtime — recharge automatiquement quand les tables changent
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("demandes-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "demandes_ravitaillement" }, () => { void fetchDemandes(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "demande_vehicules" },         () => { void fetchDemandes(); })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [fetchDemandes]);
 
   return {
     demandes,

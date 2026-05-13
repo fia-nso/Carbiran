@@ -1,7 +1,9 @@
 import AppRouter from "./routers/AppRouter";
+import { useAutoUpdate } from "./hooks/useAutoUpdate";
 
 function App() {
-  return  <AppRouter />;
+  useAutoUpdate();
+  return <AppRouter />;
 }
 
 export default App
