@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useVehicules } from "@/hooks/useVehicule";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type { Vehicule } from "@/types";
 
 interface VehiculeFormState {
@@ -34,6 +35,7 @@ export default function VehiculePage() {
   const {
     vehicules,
     loading,
+    reload,
     search,
     setSearch,
     centreFilter,
@@ -43,6 +45,7 @@ export default function VehiculePage() {
     updateVehicule,
     deleteVehicule,
   } = useVehicules();
+  useRealtimeSync({ onDemandesChange: reload });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null);

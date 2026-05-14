@@ -374,20 +374,40 @@ export function useDemandes() {
 
   const retournerRavitaillement = useCallback(
     async (demandeVehiculeId: string, demandeId: string, matricule?: string) => {
-      // Only reset if vehicle is still in "ravitaille" state (guard against double-call)
+      // 1. Récupère les URLs des photos avant de les supprimer
+      const { data: photos } = await supabase
+        .from("photos_justification")
+        .select("url, id")
+        .eq("demande_vehicule_id", demandeVehiculeId);
+
+      // 2. Supprime les fichiers du storage
+      if (photos && photos.length > 0) {
+        const paths = photos
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((p: any) => {
+            const parts = (p.url as string).split("/ravitaillement-photos/");
+            return parts[1] ?? "";
+          })
+          .filter(Boolean);
+
+        if (paths.length > 0) {
+          await supabase.storage.from("ravitaillement-photos").remove(paths);
+        }
+
+        // 3. Supprime les enregistrements en base
+        await supabase
+          .from("photos_justification")
+          .delete()
+          .eq("demande_vehicule_id", demandeVehiculeId);
+      }
+
+      // 4. Remet le véhicule en attente (guard contre double-appel)
       const { error: updateErr } = await supabase
         .from("demande_vehicules")
         .update({ statut: "en_attente", montant: null, n_liter: null, kilometrage: null })
         .eq("id", demandeVehiculeId)
         .eq("statut", "ravitaille");
       if (updateErr) throw updateErr;
-
-      // Delete photos so station can re-upload corrected ones
-      const { error: photoErr } = await supabase
-        .from("photos_justification")
-        .delete()
-        .eq("demande_vehicule_id", demandeVehiculeId);
-      if (photoErr) console.error("retournerRavitaillement photo delete:", photoErr.message);
 
       const msg = `Ravitaillement retourné pour correction${matricule ? ` : ${matricule}` : ""}`;
       void notifyByRoles(

@@ -5,6 +5,7 @@ import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useVehicules } from "@/hooks/useVehicule";
 import type { RavitaillementVehicule } from "@/types";
 
@@ -154,10 +155,12 @@ export default function RavitaillementVehiculePage() {
   const {
     ravitaillements,
     loading,
+    reload,
     addRavitaillementVehicule,
     updateRavitaillementVehicule,
     deleteRavitaillementVehicule,
   } = useRavitaillementsVehicule();
+  useRealtimeSync({ onRavitaillementChange: reload });
   const { allVehicules, loading: vehiculesLoading } = useVehicules();
 
   const [search, setSearch] = useState("");

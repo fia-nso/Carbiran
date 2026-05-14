@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type { DemandeRavitaillement, DemandeVehicule } from "@/types";
 
 
@@ -69,6 +70,8 @@ export default function DemandesPage() {
 
   useEffect(() => { void fetchDemandes(); }, [fetchDemandes]);
 
+  useRealtimeSync({ onDemandesChange: fetchDemandes, onDvChange: fetchDemandes });
+
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
   const allVehicules = demandes.flatMap((d) => d.demande_vehicules ?? []);
@@ -130,7 +133,7 @@ export default function DemandesPage() {
 
       {/* List */}
       <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-        {loading ? (
+        {loading && demandes.length === 0 ? (
           <div className="flex items-center justify-center py-16 gap-3">
             <div className="animate-spin w-7 h-7 border-4 border-gray-200 border-t-green-500 rounded-full" />
             <span className="text-gray-500">Chargement...</span>

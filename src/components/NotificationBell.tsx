@@ -29,11 +29,11 @@ export default function NotificationBell() {
     setInitialLoading(false);
   }, []);
 
-  // Initial load + polling toutes les 30 secondes
+  useEffect(() => { void load(); }, [load]);
+
   useEffect(() => {
-    void load();
-    const interval = setInterval(() => void load(), 30_000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => { void load(); }, 30_000);
+    return () => clearInterval(id);
   }, [load]);
 
   // Close on click outside

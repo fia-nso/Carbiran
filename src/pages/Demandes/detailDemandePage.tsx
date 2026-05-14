@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { uploadPhoto } from "@/lib/uploadPhoto";
 import { createNotification, notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
 import type {
@@ -171,8 +172,11 @@ function StatutBadge({ statut }: { statut: StatutDemande }) {
   );
 }
 
-function DvStatutBadge({ statut }: { statut: string }) {
-  const cfg = DV_STATUT[statut] ?? { label: statut, classes: "bg-gray-100 text-gray-700" };
+function DvStatutBadge({ statut, demandeStatut }: { statut: string; demandeStatut?: string }) {
+  let cfg = DV_STATUT[statut] ?? { label: statut, classes: "bg-gray-100 text-gray-700" };
+  if (statut === "en_attente" && demandeStatut === "en_attente") {
+    cfg = { label: "En attente d'approbation", classes: "bg-orange-100 text-orange-700" };
+  }
   return (
     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${cfg.classes}`}>
       {cfg.label}
@@ -220,9 +224,9 @@ export default function DetailDemandePage() {
   // Fetch demande + photos
   // -------------------------------------------------------------------------
 
-  const fetchDemande = useCallback(async () => {
+  const fetchDemande = useCallback(async (silent = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setFetchError(null);
     try {
       const { data, error } = await supabase
@@ -271,6 +275,12 @@ export default function DetailDemandePage() {
   }, [id]);
 
   useEffect(() => { void fetchDemande(); }, [fetchDemande]);
+
+  useRealtimeSync({
+    onDemandesChange: () => { void fetchDemande(true); },
+    onDvChange:       () => { void fetchDemande(true); },
+    onPhotosChange:   () => { void fetchDemande(true); },
+  });
 
   // -------------------------------------------------------------------------
   // Load vehicule info whenever demande changes
@@ -1025,7 +1035,7 @@ function VehiculeCard({
             <p className="text-xs text-gray-500 mt-0.5">{vehiculeSubLabel}</p>
           )}
         </div>
-        <DvStatutBadge statut={dv.statut} />
+        <DvStatutBadge statut={dv.statut} demandeStatut={demande.statut} />
       </div>
 
       {/* Success message */}

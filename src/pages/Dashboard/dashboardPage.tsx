@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 
 const monthLabels = [
   "Janvier",
@@ -43,7 +44,8 @@ function formatMetric(value: number) {
 }
 
 export default function DashboardPage() {
-  const { ravitaillements, loading } = useRavitaillementsVehicule();
+  const { ravitaillements, loading, reload } = useRavitaillementsVehicule();
+  useRealtimeSync({ onRavitaillementChange: reload });
 
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(null);
