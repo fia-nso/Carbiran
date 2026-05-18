@@ -240,7 +240,7 @@ export function useDemandes() {
   // -------------------------------------------------------------------------
 
   const saisirRavitaillement = useCallback(
-    async (demandeVehiculeId: string, data: SaisirRavitaillementData) => {
+    async (demandeVehiculeId: string, data: SaisirRavitaillementData, demandeId: string) => {
       const { montant, n_liter, kilometrage } = data;
 
       const { error: updateErr } = await supabase
@@ -249,6 +249,25 @@ export function useDemandes() {
         .eq("id", demandeVehiculeId);
 
       if (updateErr) throw updateErr;
+
+      const { data: dvs } = await supabase
+        .from("demande_vehicules")
+        .select("statut")
+        .eq("demande_id", demandeId);
+
+      if (dvs?.every((dv) => dv.statut === "ravitaille")) {
+        const { error: demandeErr } = await supabase
+          .from("demandes_ravitaillement")
+          .update({ statut: "validee_station" })
+          .eq("id", demandeId);
+        if (demandeErr) throw demandeErr;
+
+        void Promise.all([
+          notifyByRole("Admin",   "Tous les véhicules ravitaillés — demande prête pour validation", "soumission_station", demandeId),
+          notifyByRole("MENAGER", "Tous les véhicules ravitaillés — demande prête pour validation", "soumission_station", demandeId),
+        ]);
+      }
+
       await fetchDemandes();
     },
     [fetchDemandes]

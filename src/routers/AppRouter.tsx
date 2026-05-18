@@ -18,6 +18,7 @@ import DemandesPage from "@/pages/Demandes/demandesPage";
 import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
 import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
 import ModifierDemandePage from "@/pages/Demandes/modifierDemandePage";
+import UploadSignaturePage from "@/pages/Signature/uploadSignaturePage";
 
 // Redirige vers /dashboard pour Admin/MENAGER, vers /demandes pour tous les autres.
 function DefaultRedirect() {
@@ -70,6 +71,7 @@ const AppRouter: React.FC = () => {
 
               {/* Tous les rôles authentifiés */}
               <Route path="/chpass" element={<ChangePasswordPage />} />
+              <Route path="/signature/upload" element={<UploadSignaturePage />} />
               <Route path="/demandes" element={<DemandesPage />} />
               <Route path="/demandes/:id" element={<DetailDemandePage />} />
 

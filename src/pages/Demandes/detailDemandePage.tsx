@@ -4,6 +4,15 @@ import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import {
+  useSignatures,
+  CIRCUIT_SITUATION,
+  CIRCUIT_BONS,
+  getCircuitRole,
+  getProchainSignataire,
+  hasAlreadySigned,
+} from "@/hooks/useSignatures";
+import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
 import { uploadPhoto } from "@/lib/uploadPhoto";
 import { createNotification, notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
 import type {
@@ -204,6 +213,14 @@ export default function DetailDemandePage() {
     retournerRavitaillement,
   } = useDemandes();
 
+  const {
+    signaturesSituation,
+    signaturesBons,
+    fetchSignaturesSituation,
+    signerSituation,
+    signerBons,
+  } = useSignatures();
+
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
   const [vehiculesMap, setVehiculesMap] = useState<Record<number, VehiculeInfo>>({});
   const [photosMap, setPhotosMap] = useState<Record<string, PhotoJustification[]>>({});
@@ -213,12 +230,18 @@ export default function DetailDemandePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
   const [successMap, setSuccessMap] = useState<Record<string, string>>({});
+  const [signingForSituation, setSigningForSituation] = useState(false);
+  const [signingForBons,      setSigningForBons]      = useState(false);
+  const [signErrorSituation,  setSignErrorSituation]  = useState<string | null>(null);
+  const [signErrorBons,       setSignErrorBons]       = useState<string | null>(null);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
   const isStation       = user?.role === "responsable_station";
   const isStationViewer = user?.role === "responsable_station_viewer";
   const isCellule       = user?.role === "Admin" || user?.role === "MENAGER";
+  const isSignataire    = user?.role === "signataire";
+  const isCircuitActor  = isChefDept || isSignataire || isCellule;
 
   // -------------------------------------------------------------------------
   // Fetch demande + photos
@@ -277,10 +300,19 @@ export default function DetailDemandePage() {
   useEffect(() => { void fetchDemande(); }, [fetchDemande]);
 
   useRealtimeSync({
-    onDemandesChange: () => { void fetchDemande(true); },
-    onDvChange:       () => { void fetchDemande(true); },
-    onPhotosChange:   () => { void fetchDemande(true); },
+    onDemandesChange: () => {
+      void fetchDemande(true);
+      if (demande?.id) void fetchSignaturesSituation(demande.id);
+    },
+    onDvChange:     () => { void fetchDemande(true); },
+    onPhotosChange: () => { void fetchDemande(true); },
   });
+
+  // Charge les signatures quand la demande est connue
+  useEffect(() => {
+    if (!demande?.id) return;
+    void fetchSignaturesSituation(demande.id);
+  }, [demande?.id, fetchSignaturesSituation]);
 
   // -------------------------------------------------------------------------
   // Load vehicule info whenever demande changes
@@ -380,7 +412,7 @@ export default function DetailDemandePage() {
         montant:     form.montant     ? parseFloat(form.montant)     : undefined,
         n_liter:     form.n_liter     ? parseFloat(form.n_liter)     : undefined,
         kilometrage: form.kilometrage ? parseFloat(form.kilometrage) : undefined,
-      });
+      }, demande?.id ?? '');
 
       const photoEntries = (Object.entries(form.photos) as [TypePhoto, File | undefined][])
         .filter((entry): entry is [TypePhoto, File] => entry[1] != null);
@@ -440,6 +472,19 @@ export default function DetailDemandePage() {
         id
       );
 
+      const { data: dvs } = await supabase
+        .from("demande_vehicules")
+        .select("statut")
+        .eq("demande_id", demande.id);
+
+      const tousTraites = dvs?.every((d) => d.statut === "valide" || d.statut === "refuse");
+      if (tousTraites) {
+        await supabase
+          .from("demandes_ravitaillement")
+          .update({ statut: "validee_cellule" })
+          .eq("id", demande.id);
+      }
+
       setSuccessMap((prev) => ({ ...prev, [dv.id]: "Véhicule validé et enregistré !" }));
       await fetchDemande();
     } catch (e: unknown) {
@@ -481,6 +526,47 @@ export default function DetailDemandePage() {
         photos: { ...prev[dvId]?.photos, [type]: file ?? undefined },
       },
     }));
+  }
+
+  // -------------------------------------------------------------------------
+  // Signer le circuit
+  // -------------------------------------------------------------------------
+
+  const userCircuitRole = user ? getCircuitRole(user.role, user.email ?? null) : null;
+
+  async function handleSignerSituation(circuitRole: string, ordre: number) {
+    if (!demande) return;
+    setSigningForSituation(true);
+    setSignErrorSituation(null);
+    try {
+      await signerSituation(demande.id, circuitRole, ordre);
+    } catch (e: unknown) {
+      setSignErrorSituation(e instanceof Error ? e.message : "Erreur lors de la signature.");
+    } finally {
+      setSigningForSituation(false);
+    }
+  }
+
+  async function handleSignerBons(circuitRole: string, ordre: number) {
+    if (!demande) return;
+    setSigningForBons(true);
+    setSignErrorBons(null);
+    try {
+      await signerBons(demande.id, circuitRole, ordre);
+    } catch (e: unknown) {
+      setSignErrorBons(e instanceof Error ? e.message : "Erreur lors de la signature.");
+    } finally {
+      setSigningForBons(false);
+    }
+  }
+
+  // Helper : image de signature dans le HTML des impressions
+  function sigImgHtml(sigs: SignatureSituation[], role: string): string {
+    const url = sigs.find((s) => s.role === role)?.signature_url ?? null;
+    if (url) {
+      return `<img src="${url}" crossorigin="anonymous" style="max-height:48px;max-width:110px;object-fit:contain;display:block;margin:2px auto;" />`;
+    }
+    return `<div style="height:50px;"></div>`;
   }
 
   // -------------------------------------------------------------------------
@@ -532,16 +618,17 @@ export default function DetailDemandePage() {
       : `<p><strong>Direction Technique</strong></p>
          <p>${escapeHtml(dept)}</p>`;
 
+    const sigs = signaturesSituation;
     const signaturesHtml = isCdpe
-      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
-      : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
+      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>`
+      : `<div class="sig-block"><p class="sig-title">Chef Département</p>${sigImgHtml(sigs,"chef_departement")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Technique</p>${sigImgHtml(sigs,"directeur_technique")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>`;
 
     printWindow.document.write(`
       <!doctype html>
@@ -572,6 +659,7 @@ export default function DetailDemandePage() {
             .sig-block { flex: 1; text-align: center; }
             .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
             .sig-space { height: 56px; border-bottom: 1px solid #374151; }
+            .sig-line { border-bottom: 1px solid #374151; margin-top: 2px; }
             @media print {
               @page { size: A4 landscape; margin: 0mm; }
               body { margin: 10mm; padding: 0; width: calc(297mm - 20mm); box-sizing: border-box; font-size: 11px; }
@@ -698,15 +786,18 @@ export default function DetailDemandePage() {
             <div class="bon-signatures">
               <div class="bon-sig">
                 <p class="bon-sig-title">Signature Chef Département</p>
-                <div class="bon-sig-space"></div>
+                ${sigImgHtml(signaturesBons, "chef_departement")}
+                <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">
                 <p class="bon-sig-title">VISA Chef Cellule CSÉ</p>
-                <div class="bon-sig-space"></div>
+                ${sigImgHtml(signaturesBons, "chef_cellule")}
+                <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">
                 <p class="bon-sig-title">VISA Directeur Général</p>
-                <div class="bon-sig-space"></div>
+                ${sigImgHtml(signaturesBons, "directeur_general")}
+                <div class="bon-sig-line"></div>
               </div>
             </div>
           </div>
@@ -762,6 +853,7 @@ export default function DetailDemandePage() {
             .bon-sig { flex: 1; text-align: center; }
             .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
             .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
+            .bon-sig-line { border-bottom: 1px solid #374151; margin-top: 2px; }
             @media print {
               @page { size: A4 portrait; margin: 0mm; }
               body { margin: 10mm; padding: 0; }
@@ -882,27 +974,33 @@ export default function DetailDemandePage() {
               </Link>
             )}
 
-          {isChefDept && (
-            <>
-              <button
-                onClick={handlePrintSituation}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                Imprimer situation
-              </button>
-              <button
-                onClick={handlePrintBon}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Imprimer les bons
-              </button>
-            </>
+          {(isCircuitActor || isChefDeCours) && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
+            signaturesSituation.some((s) => s.role === "directeur_general") ? (
+              <>
+                <button
+                  onClick={handlePrintSituation}
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Imprimer situation
+                </button>
+                <button
+                  onClick={handlePrintBon}
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Imprimer les bons
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                Impression disponible après signature du Directeur Général
+              </p>
+            )
           )}
 
           {demande.statut === "annulee" && (
@@ -919,34 +1017,540 @@ export default function DetailDemandePage() {
         </p>
       )}
 
-      {/* Vehicles list */}
-      <div className="space-y-4">
-        {(demande.demande_vehicules ?? []).map((dv) => (
-          <VehiculeCard
-            key={dv.id}
-            dv={dv}
+      {/* Vehicles list — pour non-acteurs du circuit, + pour cellule (actions de validation) */}
+      {(!isCircuitActor || isCellule) && (
+        <div className="space-y-4">
+          {(demande.demande_vehicules ?? []).map((dv) => (
+            <VehiculeCard
+              key={dv.id}
+              dv={dv}
+              demande={demande}
+              isStation={isStation}
+              isStationViewer={isStationViewer}
+              isCellule={isCellule}
+              isChefDept={isChefDept}
+              isChefDeCours={isChefDeCours}
+              vehiculeInfo={vehiculesMap[dv.vehicule_id]}
+              photos={photosMap[dv.id]}
+              ravForm={ravForms[dv.id]}
+              processing={processing}
+              successMessage={successMap[dv.id]}
+              onUpdateForm={(patch) => updateRavForm(dv.id, patch)}
+              onUpdatePhoto={(type, file) => updateRavPhoto(dv.id, type, file)}
+              onEnvoyer={() => handleEnvoyerRavitaillement(dv)}
+              onValider={() => handleValiderVehicule(dv)}
+              onRefuser={() => handleRefuserVehicule(dv)}
+              onRetourner={() => handleRetournerRavitaillement(dv)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Placeholder pour chef_dept / signataires en attente de validation */}
+      {(isChefDept || isSignataire) &&
+        !(demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
+        <div className="bg-white rounded-2xl shadow border border-gray-200 p-8 text-center text-gray-400 text-sm">
+          Les aperçus seront disponibles après validation des ravitaillements par la cellule.
+        </div>
+      )}
+
+      {/* Aperçus situation + bons — pour tous les acteurs du circuit + chef_de_cours (lecture seule) */}
+      {(isCircuitActor || isChefDeCours) && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
+        <>
+          <SituationApercu
             demande={demande}
-            isStation={isStation}
-            isStationViewer={isStationViewer}
-            isCellule={isCellule}
-            isChefDept={isChefDept}
-            isChefDeCours={isChefDeCours}
-            vehiculeInfo={vehiculesMap[dv.vehicule_id]}
-            photos={photosMap[dv.id]}
-            ravForm={ravForms[dv.id]}
-            processing={processing}
-            successMessage={successMap[dv.id]}
-            onUpdateForm={(patch) => updateRavForm(dv.id, patch)}
-            onUpdatePhoto={(type, file) => updateRavPhoto(dv.id, type, file)}
-            onEnvoyer={() => handleEnvoyerRavitaillement(dv)}
-            onValider={() => handleValiderVehicule(dv)}
-            onRefuser={() => handleRefuserVehicule(dv)}
-            onRetourner={() => handleRetournerRavitaillement(dv)}
+            vehiculesMap={vehiculesMap}
+            signatures={signaturesSituation}
+            userCircuitRole={userCircuitRole}
+            isSigning={signingForSituation}
+            signError={signErrorSituation}
+            onSigner={handleSignerSituation}
           />
-        ))}
-      </div>
+          <BonsApercu
+            demande={demande}
+            vehiculesMap={vehiculesMap}
+            signatures={signaturesBons}
+            userCircuitRole={userCircuitRole}
+            isSigning={signingForBons}
+            signError={signErrorBons}
+            onSigner={handleSignerBons}
+          />
+        </>
+      )}
+
+      {/* Circuit de signatures — uniquement pour les non-acteurs hors chef_de_cours (ex: station) */}
+      {!isCircuitActor && !isChefDeCours && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
+        <SignaturesSection
+          signaturesSituation={signaturesSituation}
+          signaturesBons={signaturesBons}
+        />
+      )}
 
       <div className="w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-green-600 rounded-full opacity-80" />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SignaturesSection
+// ---------------------------------------------------------------------------
+
+interface SignaturesSectionProps {
+  signaturesSituation: SignatureSituation[];
+  signaturesBons: SignatureSituation[];
+}
+
+function SignaturesSection({ signaturesSituation, signaturesBons }: SignaturesSectionProps) {
+  function StepRow({ step, sigs }: { step: CircuitStep; sigs: SignatureSituation[] }) {
+    const sig      = sigs.find((s) => s.role === step.role);
+    const isSigned = !!sig;
+    return (
+      <div className="flex items-center gap-3 py-2.5 border-b border-gray-100 last:border-0">
+        <span className={`flex-shrink-0 text-lg ${isSigned ? "text-green-500" : "text-gray-300"}`}>
+          {isSigned ? "✅" : "⏳"}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${isSigned ? "text-gray-900" : "text-gray-400"}`}>
+            {step.label}
+          </p>
+          {sig && (
+            <p className="text-xs text-gray-400">
+              Signé le {new Date(sig.signe_le).toLocaleDateString("fr-FR", {
+                day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit",
+              })}
+            </p>
+          )}
+        </div>
+        {sig?.signature_url && (
+          <img src={sig.signature_url} alt="sig" className="h-8 w-16 object-contain opacity-70" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Circuit de signatures</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Situation des dépenses et bons de carburant — circuits indépendants.
+        </p>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Situation des dépenses (5 signataires)
+          </p>
+          {CIRCUIT_SITUATION.map((step) => (
+            <StepRow key={step.role} step={step} sigs={signaturesSituation} />
+          ))}
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Bons de carburant (3 signataires)
+          </p>
+          {CIRCUIT_BONS.map((step) => (
+            <StepRow key={step.role} step={step} sigs={signaturesBons} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SituationApercu — vue en lecture pour les signataires
+// ---------------------------------------------------------------------------
+
+interface SituationApercuProps {
+  demande: DemandeRavitaillement;
+  vehiculesMap: Record<number, VehiculeInfo>;
+  signatures: SignatureSituation[];       // circuit='situation' uniquement
+  userCircuitRole: string | null;
+  isSigning: boolean;
+  signError: string | null;
+  onSigner: (role: string, ordre: number) => void;
+}
+
+function SituationApercu({
+  demande,
+  vehiculesMap,
+  signatures,
+  userCircuitRole,
+  isSigning,
+  signError,
+  onSigner,
+}: SituationApercuProps) {
+  const items      = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
+  const dept       = demande.departement;
+  const isCdpe     = normalizeZone(dept) === "cpde";
+  const today      = new Date().toLocaleDateString("fr-FR");
+  const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
+  const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
+  const totalLitres  = items.reduce((sum, dv) => sum + (dv.n_liter  ?? 0), 0);
+
+  const prochainSituation = getProchainSignataire(signatures, CIRCUIT_SITUATION);
+  const alreadySigned     = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
+  const canSign           =
+    !alreadySigned &&
+    userCircuitRole !== null &&
+    CIRCUIT_SITUATION.some((s) => s.role === userCircuitRole) &&
+    prochainSituation?.role === userCircuitRole;
+
+  const sigBlocks = isCdpe
+    ? [
+        { role: "chef_cellule",          label: "Chef de la Cellule" },
+        { role: "directrice_financiere", label: "Directrice Financière" },
+        { role: "chef_cellule",          label: "Chef Cellule CSÉ" },
+        { role: "directeur_general",     label: "Directeur Général" },
+      ]
+    : [
+        { role: "chef_departement",      label: "Chef Département" },
+        { role: "directeur_technique",   label: "Directeur Technique" },
+        { role: "directrice_financiere", label: "Directrice Financière" },
+        { role: "chef_cellule",          label: "Chef Cellule CSÉ" },
+        { role: "directeur_general",     label: "Directeur Général" },
+      ];
+
+  return (
+    <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Aperçu de la situation</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Situation des dépenses carburant — lecture seule</p>
+      </div>
+
+      <div className="px-6 py-5 space-y-6">
+        {/* En-tête document */}
+        <div className="flex items-center gap-4">
+          <img
+            src="/rimatel-logo.jpeg"
+            alt="Logo RIMATEL"
+            className="w-16 h-16 object-contain flex-shrink-0"
+          />
+          <div className="flex-1">
+            {isCdpe ? (
+              <>
+                <p className="font-bold text-sm text-gray-900">Direction Générale</p>
+                <p className="text-sm text-gray-600">La Cellule de Pilotage de déploiement et des extensions</p>
+              </>
+            ) : (
+              <>
+                <p className="font-bold text-sm text-gray-900">Direction Technique</p>
+                <p className="text-sm text-gray-600">{dept}</p>
+              </>
+            )}
+          </div>
+          <div className="text-sm text-gray-700 text-right whitespace-nowrap flex-shrink-0">
+            Date : {today}
+          </div>
+        </div>
+
+        {/* Titre */}
+        <p className="text-center text-sm font-bold uppercase tracking-widest text-gray-900">
+          Situation des dépenses carburant
+        </p>
+
+        {/* Tableau */}
+        {items.length === 0 ? (
+          <p className="text-center text-gray-400 py-6">Aucun véhicule validé pour le moment.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-800 text-white">
+                  <th className="px-3 py-2 text-center border border-gray-600">N°</th>
+                  <th className="px-3 py-2 text-left border border-gray-600">Type · Matricule</th>
+                  <th className="px-3 py-2 text-right border border-gray-600">Montant (MRU)</th>
+                  <th className="px-3 py-2 text-right border border-gray-600">Litres (L)</th>
+                  <th className="px-3 py-2 text-center border border-gray-600">Date</th>
+                  <th className="px-3 py-2 text-left border border-gray-600">Responsable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((dv, index) => {
+                  const v = vehiculesMap[dv.vehicule_id];
+                  return (
+                    <tr key={dv.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                      <td className="px-3 py-2 border border-gray-200 text-center">{index + 1}</td>
+                      <td className="px-3 py-2 border border-gray-200">
+                        <span className="font-medium">{v?.vehicule || "—"}</span>
+                        {v?.matricule && (
+                          <span className="block text-gray-500">{v.matricule}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 border border-gray-200 text-right font-medium">
+                        {formatNumber(dv.montant ?? 0)}
+                      </td>
+                      <td className="px-3 py-2 border border-gray-200 text-right">
+                        {formatNumber(dv.n_liter ?? 0)}
+                      </td>
+                      <td className="px-3 py-2 border border-gray-200 text-center">{dateStr}</td>
+                      <td className="px-3 py-2 border border-gray-200">
+                        {v?.chauffeur_responsable || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-gray-100 font-bold">
+                  <td className="px-3 py-2 border border-gray-200 text-right" colSpan={2}>
+                    Total
+                  </td>
+                  <td className="px-3 py-2 border border-gray-200 text-right">
+                    {formatNumber(totalMontant)}
+                  </td>
+                  <td className="px-3 py-2 border border-gray-200 text-right">
+                    {formatNumber(totalLitres)}
+                  </td>
+                  <td className="px-3 py-2 border border-gray-200" colSpan={2} />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Blocs de signatures */}
+        <div
+          className="grid gap-3 pt-2"
+          style={{ gridTemplateColumns: `repeat(${sigBlocks.length}, minmax(0, 1fr))` }}
+        >
+          {sigBlocks.map((block, i) => {
+            const sig = signatures.find((s) => s.role === block.role);
+            return (
+              <div key={i} className="text-center">
+                <p className="text-xs font-bold uppercase tracking-tight mb-2 text-gray-700 leading-tight">
+                  {block.label}
+                </p>
+                <div className="h-12 flex items-end justify-center mb-1">
+                  {sig?.signature_url && (
+                    <img
+                      src={sig.signature_url}
+                      alt={block.label}
+                      className="max-h-12 max-w-full object-contain"
+                    />
+                  )}
+                </div>
+                <div className="border-b border-gray-400" />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bouton signer la situation */}
+        {canSign && (
+          <button
+            onClick={() => {
+              const step = CIRCUIT_SITUATION.find((s) => s.role === userCircuitRole);
+              if (step) onSigner(step.role, step.ordre);
+            }}
+            disabled={isSigning}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+          >
+            {isSigning ? "Signature en cours…" : "Signer la situation"}
+          </button>
+        )}
+
+        {canSign && (
+          <p className="text-xs text-center text-gray-400">
+            Pas encore de signature enregistrée ?{" "}
+            <Link to="/signature/upload" className="text-teal-600 hover:underline font-medium">
+              Enregistrer ma signature
+            </Link>
+          </p>
+        )}
+
+        {alreadySigned && (
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-center">
+            Vous avez signé cette situation.
+          </p>
+        )}
+
+        {signError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            {signError}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BonsApercu — aperçu en lecture des bons de carburant
+// ---------------------------------------------------------------------------
+
+interface BonsApercuProps {
+  demande: DemandeRavitaillement;
+  vehiculesMap: Record<number, VehiculeInfo>;
+  signatures: SignatureSituation[];       // circuit='bons' uniquement
+  userCircuitRole: string | null;
+  isSigning: boolean;
+  signError: string | null;
+  onSigner: (role: string, ordre: number) => void;
+}
+
+function BonsApercu({
+  demande,
+  vehiculesMap,
+  signatures,
+  userCircuitRole,
+  isSigning,
+  signError,
+  onSigner,
+}: BonsApercuProps) {
+  const items   = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
+  const dept    = demande.departement;
+  const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
+
+  const prochainBons  = getProchainSignataire(signatures, CIRCUIT_BONS);
+  const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
+  const canSignBons   =
+    !alreadySigned &&
+    userCircuitRole !== null &&
+    CIRCUIT_BONS.some((s) => s.role === userCircuitRole) &&
+    prochainBons?.role === userCircuitRole;
+
+  const bonSigBlocks = [
+    { role: "chef_departement",  label: "Signature Chef Département" },
+    { role: "chef_cellule",      label: "VISA Chef Cellule CSÉ" },
+    { role: "directeur_general", label: "VISA Directeur Général" },
+  ];
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Aperçu des bons de carburant</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Bons de carburant — lecture seule</p>
+      </div>
+
+      <div className="px-6 py-5 space-y-5">
+        {/* Grille de bons — 2 par ligne sur grands écrans */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          {items.map((dv, index) => {
+            const v        = vehiculesMap[dv.vehicule_id];
+            const bonZone  = v?.zone ?? dept;
+            const isBonCdpe = normalizeZone(bonZone) === "cpde";
+
+            return (
+              <div key={dv.id} className="border-2 border-gray-800 rounded-xl overflow-hidden text-xs">
+                {/* En-tête du bon */}
+                <div className="flex items-start gap-3 p-3 border-b border-gray-300 bg-gray-50">
+                  <img
+                    src="/rimatel-logo.jpeg"
+                    alt="Logo RIMATEL"
+                    className="w-10 h-10 object-contain flex-shrink-0"
+                  />
+                  <div>
+                    {isBonCdpe ? (
+                      <>
+                        <p className="font-bold">Direction Générale</p>
+                        <p className="text-gray-600 leading-tight">
+                          La Cellule de Pilotage de déploiement et des extensions
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-bold">Direction Technique</p>
+                        <p className="text-gray-600">{bonZone}</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Corps du bon */}
+                <div className="p-3">
+                  <div className="border-t border-dashed border-gray-400 my-2" />
+                  <p className="text-center text-sm font-bold uppercase tracking-wide py-0.5">
+                    BON DE CARBURANT N° : {index + 1}
+                  </p>
+                  <div className="border-t border-dashed border-gray-400 my-2" />
+
+                  {/* Champs */}
+                  <div className="space-y-1">
+                    {[
+                      ["Date :",                          dateStr],
+                      ["Matricule du véhicule :",         v?.matricule || "—"],
+                      ["Type de Voiture :",               v?.vehicule  || "—"],
+                      ["Nom du conducteur :",             v?.chauffeur_responsable || "—"],
+                      ["Quantité de carburant (L) :",     formatNumber(dv.n_liter ?? 0)],
+                      ["Montant :",                       `${formatNumber(dv.montant ?? 0)} MRU`],
+                      ["Montant en lettres :",            numberToWordsFr(dv.montant ?? 0)],
+                      ["Station-service :",               ""],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex gap-1 border-b border-gray-200 pb-0.5">
+                        <span className="font-semibold whitespace-nowrap text-gray-700">{label}</span>
+                        <span className="flex-1 text-gray-900">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Blocs de signatures */}
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {bonSigBlocks.map((block) => {
+                      const sig = signatures.find((s) => s.role === block.role);
+                      return (
+                        <div key={block.role} className="text-center">
+                          <p className="font-bold uppercase leading-tight mb-1" style={{ fontSize: "0.6rem" }}>
+                            {block.label}
+                          </p>
+                          <div className="h-8 flex items-end justify-center mb-0.5">
+                            {sig?.signature_url && (
+                              <img
+                                src={sig.signature_url}
+                                alt={block.label}
+                                className="max-h-8 max-w-full object-contain"
+                              />
+                            )}
+                          </div>
+                          <div className="border-b border-gray-600" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bouton signer les bons */}
+        {canSignBons && (
+          <button
+            onClick={() => {
+              const step = CIRCUIT_BONS.find((s) => s.role === userCircuitRole);
+              if (step) onSigner(step.role, step.ordre);
+            }}
+            disabled={isSigning}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+          >
+            {isSigning ? "Signature en cours…" : "Signer les bons"}
+          </button>
+        )}
+
+        {alreadySigned && (
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-center">
+            Vous avez signé les bons.
+          </p>
+        )}
+
+        {canSignBons && (
+          <p className="text-xs text-center text-gray-400">
+            Pas encore de signature enregistrée ?{" "}
+            <Link to="/signature/upload" className="text-teal-600 hover:underline font-medium">
+              Enregistrer ma signature
+            </Link>
+          </p>
+        )}
+
+        {signError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            {signError}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,7 +5,8 @@ export type AppRole =
   | "chef_de_cours"
   | "chef_departement"
   | "responsable_station"
-  | "responsable_station_viewer";
+  | "responsable_station_viewer"
+  | "signataire";
 
 export interface User {
   id: string;

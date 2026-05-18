@@ -9,11 +9,18 @@ const NAV_LINK =
 const MOBILE_NAV_LINK =
   "flex items-center px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/15 transition-colors font-medium text-white text-base";
 
-function getRoleLabel(role: string, departement?: string | null): string {
+function getRoleLabel(role: string, departement?: string | null, email?: string | null): string {
   if (role === "Admin" || role === "MENAGER")            return "Cellule CSÉ";
   if (role === "chef_de_cours")                          return "Responsable Parc";
   if (role === "responsable_station")                    return "Superviseur/Station";
   if (role === "responsable_station_viewer")             return "Chef Département Achat";
+  if (role === "signataire") {
+    const e = (email ?? "").toLowerCase();
+    if (e.includes("dt")) return "Directeur Technique";
+    if (e.includes("dg")) return "Directeur Général";
+    if (e.includes("df")) return "Directrice Financière";
+    return "Signataire";
+  }
   if (role === "chef_departement")
     return departement ? `Chef Département ${departement}` : "Chef Département";
   return role;
@@ -26,8 +33,9 @@ export default function Header() {
 
   const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
   const isAdmin          = user?.role === "Admin";
+  const isSignataire     = user?.role === "signataire";
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
-  const roleLabel        = user ? getRoleLabel(user.role, user.departement) : "";
+  const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.email) : "";
 
   const handleLogout = async () => {
     try {
@@ -64,14 +72,24 @@ export default function Header() {
                       <Link to="/logs"  className={NAV_LINK}>Logs</Link>
                     </>
                   )}
-                  <Link to="/demandes" className={NAV_LINK}>Demandes</Link>
-                  <Link to="/chpass"   className={NAV_LINK}>Changer mot de passe</Link>
+                  <Link to="/demandes"         className={NAV_LINK}>Demandes</Link>
+                  <Link to="/signature/upload" className={NAV_LINK}>Ma signature</Link>
+                  <Link to="/chpass"           className={NAV_LINK}>Changer mot de passe</Link>
+                </>
+              ) : isSignataire ? (
+                <>
+                  <Link to="/demandes"          className={NAV_LINK}>Demandes</Link>
+                  <Link to="/signature/upload"  className={NAV_LINK}>Ma signature</Link>
+                  <Link to="/chpass"            className={NAV_LINK}>Changer mot de passe</Link>
                 </>
               ) : (
                 <>
                   <Link to="/demandes" className={NAV_LINK}>Demandes</Link>
                   {canCreateDemande && (
                     <Link to="/demandes/nouvelle" className={NAV_LINK}>Nouvelle demande</Link>
+                  )}
+                  {user?.role === "chef_departement" && (
+                    <Link to="/signature/upload" className={NAV_LINK}>Ma signature</Link>
                   )}
                   <Link to="/chpass" className={NAV_LINK}>Changer mot de passe</Link>
                 </>
@@ -146,14 +164,24 @@ export default function Header() {
                   <Link to="/logs"  className={MOBILE_NAV_LINK} onClick={closeMenu}>Logs</Link>
                 </>
               )}
-              <Link to="/demandes" className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
-              <Link to="/chpass"   className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
+              <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
+              <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
+            </>
+          ) : isSignataire ? (
+            <>
+              <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
+              <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
           ) : (
             <>
               <Link to="/demandes" className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
               {canCreateDemande && (
                 <Link to="/demandes/nouvelle" className={MOBILE_NAV_LINK} onClick={closeMenu}>Nouvelle demande</Link>
+              )}
+              {user?.role === "chef_departement" && (
+                <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
               )}
               <Link to="/chpass" className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
