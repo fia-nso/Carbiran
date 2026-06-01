@@ -19,6 +19,7 @@ import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
 import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
 import ModifierDemandePage from "@/pages/Demandes/modifierDemandePage";
 import UploadSignaturePage from "@/pages/Signature/uploadSignaturePage";
+import BonVerificationPage from "@/pages/Public/bonVerificationPage";
 
 // Redirige vers /dashboard pour Admin/MENAGER, vers /demandes pour tous les autres.
 function DefaultRedirect() {
@@ -48,6 +49,7 @@ const AppRouter: React.FC = () => {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/bon/:id" element={<BonVerificationPage />} />
 
           {/* Protégées — utilisent le layout */}
           <Route element={<ProtectedRoute />}>

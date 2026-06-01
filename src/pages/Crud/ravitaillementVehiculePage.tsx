@@ -1,5 +1,6 @@
 import type { FormEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { Modal } from "@/components/ui/Modal";
 import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
@@ -621,7 +622,7 @@ export default function RavitaillementVehiculePage() {
     printWindow.print();
   }
 
-  function handlePrintBon() {
+  async function handlePrintBon() {
     if (selectedRavitaillements.length === 0) {
       alert("Selectionnez au moins un ravitaillement a imprimer.");
       return;
@@ -635,17 +636,34 @@ export default function RavitaillementVehiculePage() {
 
     const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
 
+    const sorted = [...selectedRavitaillements].sort((a, b) =>
+      (a.vehicule?.zone ?? "").localeCompare(b.vehicule?.zone ?? "", "fr")
+    );
+
+    const qrMap: Record<number, string> = {};
+    for (const item of sorted) {
+      const url = `https://carburan-rimatel.vercel.app/bon/${item.id}`;
+      qrMap[item.id] = await QRCode.toDataURL(url, { width: 100 });
+    }
+
     function bonHtml(item: (typeof selectedRavitaillements)[0], num: number) {
       const itemZone = item.vehicule?.zone ?? "";
       const itemIsCdpe = normalizeZone(itemZone) === "cpde";
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
+      const qrImg = qrMap[item.id]
+        ? `<div style="text-align:center;flex-shrink:0;">
+             <img src="${qrMap[item.id]}" alt="QR Code" style="width:72px;height:72px;display:block;" />
+             <p style="font-size:8px;margin:2px 0 0;color:#374151;">Scannez pour vérifier</p>
+           </div>`
+        : "";
       return `
         <div class="bon">
           <div class="bon-header">
             <img src="${logoUrl}" alt="Logo RIMATEL" />
             <div class="bon-header-info">${bonHeaderInfo}</div>
+            ${qrImg}
           </div>
           <div class="bon-frame">
             <div class="dotted-line"></div>
@@ -709,10 +727,6 @@ export default function RavitaillementVehiculePage() {
     }
 
     const emptyBon = `<div class="bon"></div>`;
-
-    const sorted = [...selectedRavitaillements].sort((a, b) =>
-      (a.vehicule?.zone ?? "").localeCompare(b.vehicule?.zone ?? "", "fr")
-    );
 
     const pages: string[] = [];
     for (let i = 0; i < sorted.length; i += 2) {

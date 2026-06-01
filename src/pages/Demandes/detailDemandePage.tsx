@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import QRCode from "qrcode";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
 import { useAuthContext } from "@/context/AuthProvider";
@@ -710,7 +711,7 @@ export default function DetailDemandePage() {
   // Print — Bons
   // -------------------------------------------------------------------------
 
-  function handlePrintBon() {
+  async function handlePrintBon() {
     if (!demande) return;
     const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
     if (items.length === 0) {
@@ -728,6 +729,18 @@ export default function DetailDemandePage() {
     const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const dept    = demande.departement;
 
+    const sorted = [...items].sort((a, b) =>
+      (vehiculesMap[a.vehicule_id]?.zone ?? "").localeCompare(
+        vehiculesMap[b.vehicule_id]?.zone ?? "", "fr"
+      )
+    );
+
+    const qrMap: Record<string, string> = {};
+    for (const dv of sorted) {
+      const url = `https://carburan-rimatel.vercel.app/bon/${dv.id}`;
+      qrMap[dv.id] = await QRCode.toDataURL(url, { width: 100 });
+    }
+
     function bonHtml(dv: DemandeVehicule, num: number) {
       const v          = vehiculesMap[dv.vehicule_id];
       const itemZone   = v?.zone ?? dept;
@@ -735,11 +748,18 @@ export default function DetailDemandePage() {
       const bonHeaderInfo = itemIsCdpe
         ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
+      const qrImg = qrMap[dv.id]
+        ? `<div style="text-align:center;flex-shrink:0;">
+             <img src="${qrMap[dv.id]}" alt="QR Code" style="width:72px;height:72px;display:block;" />
+             <p style="font-size:8px;margin:2px 0 0;color:#374151;">Scannez pour vérifier</p>
+           </div>`
+        : "";
       return `
         <div class="bon">
           <div class="bon-header">
             <img src="${logoUrl}" alt="Logo RIMATEL" />
             <div class="bon-header-info">${bonHeaderInfo}</div>
+            ${qrImg}
           </div>
           <div class="bon-frame">
             <div class="dotted-line"></div>
@@ -806,11 +826,6 @@ export default function DetailDemandePage() {
     }
 
     const emptyBon = `<div class="bon"></div>`;
-    const sorted   = [...items].sort((a, b) =>
-      (vehiculesMap[a.vehicule_id]?.zone ?? "").localeCompare(
-        vehiculesMap[b.vehicule_id]?.zone ?? "", "fr"
-      )
-    );
 
     const pages: string[] = [];
     for (let i = 0; i < sorted.length; i += 2) {
@@ -1403,6 +1418,24 @@ function BonsApercu({
   const dept    = demande.departement;
   const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
 
+  const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
+  const itemIds = useMemo(() => items.map((dv) => dv.id).join(","), [items]);
+  useEffect(() => {
+    if (items.length === 0) return;
+    async function gen() {
+      const map: Record<string, string> = {};
+      for (const dv of items) {
+        map[dv.id] = await QRCode.toDataURL(
+          `https://carburan-rimatel.vercel.app/bon/${dv.id}`,
+          { width: 100 }
+        );
+      }
+      setQrUrls(map);
+    }
+    void gen();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemIds]);
+
   const prochainBons  = getProchainSignataire(signatures, CIRCUIT_BONS);
   const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
   const canSignBons   =
@@ -1443,7 +1476,7 @@ function BonsApercu({
                     alt="Logo RIMATEL"
                     className="w-10 h-10 object-contain flex-shrink-0"
                   />
-                  <div>
+                  <div className="flex-1">
                     {isBonCdpe ? (
                       <>
                         <p className="font-bold">Direction Générale</p>
@@ -1458,6 +1491,18 @@ function BonsApercu({
                       </>
                     )}
                   </div>
+                  {qrUrls[dv.id] && (
+                    <div className="flex-shrink-0 text-center">
+                      <img
+                        src={qrUrls[dv.id]}
+                        alt="QR Code"
+                        className="w-12 h-12"
+                      />
+                      <p className="text-gray-500 mt-0.5" style={{ fontSize: "0.55rem" }}>
+                        Scannez pour vérifier
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Corps du bon */}
