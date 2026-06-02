@@ -768,6 +768,14 @@ export default function DetailDemandePage() {
       return;
     }
 
+    // Recharge les signatures fraîches avant impression
+    await fetchSignaturesSituation(demande.id);
+
+    console.log('signaturesBons:', signaturesBons);
+    console.log('sigImgHtml chef_departement:', sigImgHtml(signaturesBons, "chef_departement"));
+    console.log('sigImgHtml chef_cellule:', sigImgHtml(signaturesBons, "chef_cellule"));
+    console.log('sigImgHtml directeur_general:', sigImgHtml(signaturesBons, "directeur_general"));
+
     const printWindow = window.open("", "_blank", "width=900,height=1200");
     if (!printWindow) {
       alert("Impossible d'ouvrir la fenêtre d'impression.");
@@ -839,14 +847,6 @@ export default function DetailDemandePage() {
               <div class="field-row">
                 <span class="field-label">Montant en lettres :</span>
                 <span class="field-value">${escapeHtml(numberToWordsFr(dv.montant ?? 0))}</span>
-              </div>
-              <div class="field-row">
-                <span class="field-label">Station-service :</span>
-                <span class="field-value"></span>
-              </div>
-              <div class="field-row">
-                <span class="field-label">Signature du responsable Station :</span>
-                <span class="field-value"></span>
               </div>
             </div>
             <div class="bon-signatures">

@@ -143,12 +143,36 @@ export default function BonVerificationPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const idx = sorted.findIndex((v: any) => v.id === id);
 
-    // 3. Charge les signatures du circuit bons
-    const { data: sigsData } = await supabase
+    // 3. Signatures circuit bons : signatures_situation → user_id → signatures_utilisateurs → signature_url
+    const { data: sigsRaw } = await supabase
       .from("signatures_situation")
-      .select("role, signature_url, signe_le")
+      .select("role, signe_le, user_id")
       .eq("demande_id", d.demande_id)
       .eq("circuit", "bons");
+
+    const sigEntries: SigEntry[] = [];
+    if (sigsRaw && sigsRaw.length > 0) {
+      const rows = sigsRaw as { role: string; signe_le: string; user_id: string }[];
+      const userIds = rows.map((s) => s.user_id);
+
+      const { data: userSigs } = await supabase
+        .from("signatures_utilisateurs")
+        .select("user_id, signature_url")
+        .in("user_id", userIds);
+
+      const urlByUser: Record<string, string | null> = {};
+      for (const u of (userSigs ?? []) as { user_id: string; signature_url: string | null }[]) {
+        urlByUser[u.user_id] = u.signature_url;
+      }
+
+      for (const s of rows) {
+        sigEntries.push({
+          role:          s.role,
+          signe_le:      s.signe_le,
+          signature_url: urlByUser[s.user_id] ?? null,
+        });
+      }
+    }
 
     setBon({
       id:           d.id,
@@ -165,7 +189,7 @@ export default function BonVerificationPage() {
         : "—",
       bonNum: idx >= 0 ? idx + 1 : 1,
     });
-    setSigs((sigsData ?? []) as SigEntry[]);
+    setSigs(sigEntries);
     setLoading(false);
   }
 
