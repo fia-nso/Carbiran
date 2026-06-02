@@ -9,16 +9,15 @@ const NAV_LINK =
 const MOBILE_NAV_LINK =
   "flex items-center px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/15 transition-colors font-medium text-white text-base";
 
-function getRoleLabel(role: string, departement?: string | null, email?: string | null): string {
-  if (role === "Admin" || role === "MENAGER")            return "Cellule CSÉ";
-  if (role === "chef_de_cours")                          return "Responsable Parc";
-  if (role === "responsable_station")                    return "Superviseur/Station";
-  if (role === "responsable_station_viewer")             return "Chef Département Achat";
+function getRoleLabel(role: string, departement?: string | null, circuitRole?: string | null): string {
+  if (role === "Admin" || role === "MENAGER")  return "Cellule CSÉ";
+  if (role === "chef_de_cours")                return "Responsable Parc";
+  if (role === "responsable_station")          return "Superviseur/Station";
+  if (role === "responsable_station_viewer")   return "Chef Département Achat";
   if (role === "signataire") {
-    const e = (email ?? "").toLowerCase();
-    if (e.includes("dt")) return "Directeur Technique";
-    if (e.includes("dg")) return "Directeur Général";
-    if (e.includes("df")) return "Directrice Financière";
+    if (circuitRole === "directeur_technique")   return "Directeur Technique";
+    if (circuitRole === "directeur_general")     return "Directeur Général";
+    if (circuitRole === "directrice_financiere") return "Directrice Financière";
     return "Signataire";
   }
   if (role === "chef_departement")
@@ -34,8 +33,9 @@ export default function Header() {
   const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
   const isAdmin          = user?.role === "Admin";
   const isSignataire     = user?.role === "signataire";
+  const isDG             = isSignataire && user?.circuit_role === "directeur_general";
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
-  const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.email) : "";
+  const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.circuit_role) : "";
 
   const handleLogout = async () => {
     try {
@@ -73,6 +73,15 @@ export default function Header() {
                     </>
                   )}
                   <Link to="/demandes"         className={NAV_LINK}>Demandes</Link>
+                  <Link to="/signature/upload" className={NAV_LINK}>Ma signature</Link>
+                  <Link to="/chpass"           className={NAV_LINK}>Changer mot de passe</Link>
+                </>
+              ) : isDG ? (
+                <>
+                  <Link to="/dashboard"        className={NAV_LINK}>Tableau de bord</Link>
+                  <Link to="/demandes"         className={NAV_LINK}>Demandes</Link>
+                  <Link to="/ravitaillements"  className={NAV_LINK}>Ravitaillements</Link>
+                  <Link to="/vehicules"        className={NAV_LINK}>Véhicules</Link>
                   <Link to="/signature/upload" className={NAV_LINK}>Ma signature</Link>
                   <Link to="/chpass"           className={NAV_LINK}>Changer mot de passe</Link>
                 </>
@@ -165,6 +174,15 @@ export default function Header() {
                 </>
               )}
               <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
+              <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
+            </>
+          ) : isDG ? (
+            <>
+              <Link to="/dashboard"        className={MOBILE_NAV_LINK} onClick={closeMenu}>Tableau de bord</Link>
+              <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              <Link to="/ravitaillements"  className={MOBILE_NAV_LINK} onClick={closeMenu}>Ravitaillements</Link>
+              <Link to="/vehicules"        className={MOBILE_NAV_LINK} onClick={closeMenu}>Véhicules</Link>
               <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
               <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>

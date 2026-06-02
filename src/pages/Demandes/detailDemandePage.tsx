@@ -16,6 +16,7 @@ import {
 import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
 import { uploadPhoto } from "@/lib/uploadPhoto";
 import { createNotification, notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
+// import { sendSignatureEmail } from "@/lib/sendEmail"; // TODO: réactiver après config DNS rimatel.mr
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -120,6 +121,7 @@ function mapRow(row: any): DemandeRavitaillement {
     id: row.id,
     departement: row.departement,
     statut: row.statut as StatutDemande,
+    situation_soumise: row.situation_soumise ?? false,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -140,6 +142,7 @@ const DETAIL_SELECT = `
   id,
   departement,
   statut,
+  situation_soumise,
   created_by,
   created_at,
   updated_at,
@@ -235,6 +238,7 @@ export default function DetailDemandePage() {
   const [signingForBons,      setSigningForBons]      = useState(false);
   const [signErrorSituation,  setSignErrorSituation]  = useState<string | null>(null);
   const [signErrorBons,       setSignErrorBons]       = useState<string | null>(null);
+  const [circuitSuccess,      setCircuitSuccess]      = useState<string | null>(null);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
@@ -242,6 +246,7 @@ export default function DetailDemandePage() {
   const isStationViewer = user?.role === "responsable_station_viewer";
   const isCellule       = user?.role === "Admin" || user?.role === "MENAGER";
   const isSignataire    = user?.role === "signataire";
+  const isDG            = isSignataire && user?.circuit_role === "directeur_general";
   const isCircuitActor  = isChefDept || isSignataire || isCellule;
 
   // -------------------------------------------------------------------------
@@ -274,7 +279,10 @@ export default function DetailDemandePage() {
       setDemande(mapped);
 
       const dvIds      = (mapped.demande_vehicules ?? []).map((dv) => dv.id);
-      const needPhotos = (mapped.demande_vehicules ?? []).some((dv) => dv.statut !== "en_attente");
+      // charger aussi les photos quand dv a des valeurs (ex : retourné par cellule, statut redevenu "en_attente")
+      const needPhotos = (mapped.demande_vehicules ?? []).some(
+        (dv) => dv.statut !== "en_attente" || dv.montant != null
+      );
 
       if (needPhotos && dvIds.length > 0) {
         const { data: pData } = await supabase
@@ -343,7 +351,12 @@ export default function DetailDemandePage() {
       const next = { ...prev };
       demande.demande_vehicules?.forEach((dv) => {
         if (dv.statut === "en_attente" && !next[dv.id]) {
-          next[dv.id] = { montant: "", n_liter: "", kilometrage: "", photos: {} };
+          next[dv.id] = {
+            montant:     dv.montant     != null ? String(dv.montant)     : "",
+            n_liter:     dv.n_liter     != null ? String(dv.n_liter)     : "",
+            kilometrage: dv.kilometrage != null ? String(dv.kilometrage) : "",
+            photos: {},
+          };
         }
       });
       return next;
@@ -533,7 +546,7 @@ export default function DetailDemandePage() {
   // Signer le circuit
   // -------------------------------------------------------------------------
 
-  const userCircuitRole = user ? getCircuitRole(user.role, user.email ?? null) : null;
+  const userCircuitRole = user ? getCircuitRole(user.role, user.circuit_role) : null;
 
   async function handleSignerSituation(circuitRole: string, ordre: number) {
     if (!demande) return;
@@ -558,6 +571,41 @@ export default function DetailDemandePage() {
       setSignErrorBons(e instanceof Error ? e.message : "Erreur lors de la signature.");
     } finally {
       setSigningForBons(false);
+    }
+  }
+
+  async function handleSoumettreSituation() {
+    if (!demande) return;
+    const vehiculesValides = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
+    const count = vehiculesValides.length;
+    if (!window.confirm(
+      `Vous allez soumettre la situation avec ${count} véhicule(s) validé(s). ` +
+      `Les véhicules non ravitaillés ne seront pas inclus. Continuer ?`
+    )) return;
+
+    setProcessing("soumettre_circuit");
+    setCircuitSuccess(null);
+    setSubmitError(null);
+    try {
+      // TODO: réactiver après config DNS rimatel.mr
+      // const { data: chefProfile } = await supabase
+      //   .from("profiles").select("email")
+      //   .eq("role", "chef_departement").eq("departement", demande.departement).maybeSingle();
+      // const chefEmail = (chefProfile as { email: string } | null)?.email;
+      // if (chefEmail) {
+      //   await sendSignatureEmail(chefEmail, "Chef Département", demande.id, demande.departement,
+      //     `La situation des dépenses carburant est prête pour votre signature. ${count} véhicule(s) validé(s).`);
+      // }
+      await supabase
+        .from("demandes_ravitaillement")
+        .update({ situation_soumise: true })
+        .eq("id", demande.id);
+      await fetchDemande();
+      setCircuitSuccess("Situation soumise pour signature !");
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la soumission.");
+    } finally {
+      setProcessing(null);
     }
   }
 
@@ -588,7 +636,7 @@ export default function DetailDemandePage() {
       return;
     }
 
-    const logoUrl      = `${window.location.origin}/rimatel-logo.jpeg`;
+    const logoUrl      = `${window.location.origin}/LOGO.webp`;
     const dept         = demande.departement;
     const isCdpe       = normalizeZone(dept) === "cpde";
     const today        = new Date().toLocaleDateString("fr-FR");
@@ -642,7 +690,7 @@ export default function DetailDemandePage() {
             body { font-family: Arial, sans-serif; color: #1f2937; font-size: 11px; }
             .doc-header { display: flex; align-items: center; justify-content: space-between;
                           gap: 16px; margin-bottom: 4px; }
-            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
+            .doc-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
             .doc-header-info p { margin: 2px 0; font-size: 13px; }
             .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
             .doc-title { text-align: center; font-size: 15px; font-weight: 700;
@@ -678,6 +726,7 @@ export default function DetailDemandePage() {
             <div class="doc-date">Date : ${today}</div>
           </div>
           <div class="doc-title">Situation des dépenses carburant</div>
+          <p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>
           <table>
             <thead>
               <tr>
@@ -725,7 +774,7 @@ export default function DetailDemandePage() {
       return;
     }
 
-    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
     const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const dept    = demande.departement;
 
@@ -746,14 +795,11 @@ export default function DetailDemandePage() {
       const itemZone   = v?.zone ?? dept;
       const itemIsCdpe = normalizeZone(itemZone) === "cpde";
       const bonHeaderInfo = itemIsCdpe
-        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
-        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
+        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`
+        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
       const qrImg = qrMap[dv.id]
-        ? `<div style="text-align:center;flex-shrink:0;">
-             <img src="${qrMap[dv.id]}" alt="QR Code" style="width:72px;height:72px;display:block;" />
-             <p style="font-size:8px;margin:2px 0 0;color:#374151;">Scannez pour vérifier</p>
-           </div>`
-        : "";
+        ? `<img src="${qrMap[dv.id]}" alt="QR Code" class="bon-qr" />`
+        : `<div style="width:150px;height:150px;flex-shrink:0;"></div>`;
       return `
         <div class="bon">
           <div class="bon-header">
@@ -854,8 +900,10 @@ export default function DetailDemandePage() {
             .page-break { page-break-after: always; }
             .bon { height: 138.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
-            .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
-            .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
+            .bon-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+            .bon-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .bon-qr { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .bon-header-info { flex: 1; text-align: center; }
             .bon-header-info p { margin: 2px 0; font-size: 16px; }
             .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
             .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }
@@ -989,6 +1037,26 @@ export default function DetailDemandePage() {
               </Link>
             )}
 
+          {/* cellule : soumettre la situation finale pour signature */}
+          {isCellule &&
+            (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") &&
+            signaturesSituation.length === 0 && (
+              <div className="w-full flex flex-col gap-2">
+                <button
+                  onClick={handleSoumettreSituation}
+                  disabled={processing === "soumettre_circuit"}
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow text-sm font-medium disabled:opacity-50"
+                >
+                  {processing === "soumettre_circuit" ? "Envoi en cours…" : "Soumettre la situation finale"}
+                </button>
+                {circuitSuccess && (
+                  <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
+                    {circuitSuccess}
+                  </p>
+                )}
+              </div>
+            )}
+
           {(isCircuitActor || isChefDeCours) && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
             signaturesSituation.some((s) => s.role === "directeur_general") ? (
               <>
@@ -1032,8 +1100,8 @@ export default function DetailDemandePage() {
         </p>
       )}
 
-      {/* Vehicles list — pour non-acteurs du circuit, + pour cellule (actions de validation) */}
-      {(!isCircuitActor || isCellule) && (
+      {/* Vehicles list — pour non-acteurs du circuit, pour cellule (actions) et pour DG (lecture seule) */}
+      {(!isCircuitActor || isCellule || isDG) && (
         <div className="space-y-4">
           {(demande.demande_vehicules ?? []).map((dv) => (
             <VehiculeCard
@@ -1045,6 +1113,7 @@ export default function DetailDemandePage() {
               isCellule={isCellule}
               isChefDept={isChefDept}
               isChefDeCours={isChefDeCours}
+              isReadOnly={isDG}
               vehiculeInfo={vehiculesMap[dv.vehicule_id]}
               photos={photosMap[dv.id]}
               ravForm={ravForms[dv.id]}
@@ -1061,8 +1130,8 @@ export default function DetailDemandePage() {
         </div>
       )}
 
-      {/* Placeholder pour chef_dept / signataires en attente de validation */}
-      {(isChefDept || isSignataire) &&
+      {/* Placeholder pour chef_dept / signataires non-DG en attente de validation */}
+      {(isChefDept || (isSignataire && !isDG)) &&
         !(demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
         <div className="bg-white rounded-2xl shadow border border-gray-200 p-8 text-center text-gray-400 text-sm">
           Les aperçus seront disponibles après validation des ravitaillements par la cellule.
@@ -1209,6 +1278,7 @@ function SituationApercu({
   const prochainSituation = getProchainSignataire(signatures, CIRCUIT_SITUATION);
   const alreadySigned     = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
   const canSign           =
+    demande.situation_soumise === true &&
     !alreadySigned &&
     userCircuitRole !== null &&
     CIRCUIT_SITUATION.some((s) => s.role === userCircuitRole) &&
@@ -1240,7 +1310,7 @@ function SituationApercu({
         {/* En-tête document */}
         <div className="flex items-center gap-4">
           <img
-            src="/rimatel-logo.jpeg"
+            src="/LOGO.webp"
             alt="Logo RIMATEL"
             className="w-16 h-16 object-contain flex-shrink-0"
           />
@@ -1352,7 +1422,7 @@ function SituationApercu({
           })}
         </div>
 
-        {/* Bouton signer la situation */}
+        {/* Bouton signer la situation — visible dès que c'est le tour de l'utilisateur */}
         {canSign && (
           <button
             onClick={() => {
@@ -1439,6 +1509,7 @@ function BonsApercu({
   const prochainBons  = getProchainSignataire(signatures, CIRCUIT_BONS);
   const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
   const canSignBons   =
+    demande.situation_soumise === true &&
     !alreadySigned &&
     userCircuitRole !== null &&
     CIRCUIT_BONS.some((s) => s.role === userCircuitRole) &&
@@ -1472,7 +1543,7 @@ function BonsApercu({
                 {/* En-tête du bon */}
                 <div className="flex items-start gap-3 p-3 border-b border-gray-300 bg-gray-50">
                   <img
-                    src="/rimatel-logo.jpeg"
+                    src="/LOGO.webp"
                     alt="Logo RIMATEL"
                     className="w-10 h-10 object-contain flex-shrink-0"
                   />
@@ -1561,7 +1632,7 @@ function BonsApercu({
           })}
         </div>
 
-        {/* Bouton signer les bons */}
+        {/* Bouton signer les bons — visible dès que c'est le tour de l'utilisateur */}
         {canSignBons && (
           <button
             onClick={() => {
@@ -1612,6 +1683,7 @@ interface VehiculeCardProps {
   isCellule: boolean;
   isChefDept: boolean;
   isChefDeCours: boolean;
+  isReadOnly?: boolean;
   vehiculeInfo?: VehiculeInfo;
   photos?: PhotoJustification[];
   ravForm: RavForm | undefined;
@@ -1633,6 +1705,7 @@ function VehiculeCard({
   isCellule,
   isChefDept,
   isChefDeCours,
+  isReadOnly = false,
   vehiculeInfo,
   photos,
   ravForm,
@@ -1649,20 +1722,24 @@ function VehiculeCard({
 
   const showStationSent     = isStation && dv.statut === "ravitaille";
   const showStationReadOnly = isStation && (dv.statut === "ravitaille" || dv.statut === "valide");
-  const showForm            = isStation && demande.statut === "validee_dept" && dv.statut === "en_attente";
-  const showAmounts         = (isCellule || isChefDept || isStationViewer || isChefDeCours || showStationReadOnly) && dv.statut !== "en_attente";
-  const showPhotos          = (isCellule || isStationViewer || isChefDeCours || showStationReadOnly) && (photos?.length ?? 0) > 0;
+  const showForm            = isStation && dv.statut === "en_attente";
+  const showAmounts         = (isCellule || isChefDept || isStationViewer || isChefDeCours || showStationReadOnly || isReadOnly) && dv.statut !== "en_attente";
+  const showPhotos          = (isCellule || isStationViewer || isChefDeCours || showStationReadOnly || isReadOnly) && (photos?.length ?? 0) > 0;
   const showCelluleActions = isCellule && dv.statut === "ravitaille";
   const isSaving           = processing === `rav_${dv.id}`;
   const isValidating       = processing === `valider_${dv.id}`;
   const isRefusing         = processing === `refuser_${dv.id}`;
   const isReturning        = processing === `retourner_${dv.id}`;
 
+  const hasAnyPhoto =
+    Object.values(ravForm?.photos ?? {}).some(Boolean) ||
+    (photos ?? []).some((p) => (["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).includes(p.type as TypePhoto));
+
   const canEnvoyer =
     ravForm != null &&
     parseFloat(ravForm.montant) > 0 &&
     parseFloat(ravForm.n_liter) > 0 &&
-    Object.values(ravForm.photos).some(Boolean);
+    hasAnyPhoto;
 
   const vehiculeLabel = vehiculeInfo
     ? `${vehiculeInfo.matricule} · ${vehiculeInfo.vehicule}`
@@ -1806,7 +1883,9 @@ function VehiculeCard({
 
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              Photos ({(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).filter((t) => ravForm.photos[t]).length}/3)
+              Photos ({(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).filter((t) =>
+                ravForm.photos[t] != null || photos?.some((p) => p.type === t)
+              ).length}/3)
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {(["vehicule_avant", "vehicule_apres", "pompe"] as TypePhoto[]).map((type) => (
@@ -1815,6 +1894,7 @@ function VehiculeCard({
                   dvId={dv.id}
                   type={type}
                   file={ravForm.photos[type] ?? null}
+                  existingUrl={photos?.find((p) => p.type === type)?.url ?? null}
                   onChange={(file) => onUpdatePhoto(type, file)}
                 />
               ))}
@@ -1888,46 +1968,57 @@ function PhotoInput({
   dvId,
   type,
   file,
+  existingUrl,
   onChange,
 }: {
   dvId: string;
   type: TypePhoto;
   file: File | null;
+  existingUrl?: string | null;
   onChange: (f: File | null) => void;
 }) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const label      = PHOTO_LABELS[type];
   const previewUrl = file ? URL.createObjectURL(file) : null;
+  const displayUrl = previewUrl ?? existingUrl ?? null;
+  const isExisting = !previewUrl && !!existingUrl;
   const inputId    = `photo-${dvId}-${type}`;
 
   return (
     <div>
       {lightboxUrl && <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      {previewUrl ? (
+      {displayUrl ? (
         <>
           <button
             type="button"
-            onClick={() => setLightboxUrl(previewUrl)}
-            className="block w-full h-28 rounded-xl border border-teal-400 bg-teal-50 overflow-hidden cursor-zoom-in"
+            onClick={() => setLightboxUrl(displayUrl)}
+            className={`block w-full h-28 rounded-xl overflow-hidden cursor-zoom-in ${
+              isExisting ? "border border-gray-200" : "border border-teal-400 bg-teal-50"
+            }`}
           >
-            <img src={previewUrl} alt={label} className="w-full h-full object-cover" />
+            <img src={displayUrl} alt={label} className="w-full h-full object-cover" />
           </button>
           <div className="flex mt-1">
             <label
               htmlFor={inputId}
               className="flex-1 text-xs text-center text-teal-600 hover:text-teal-800 cursor-pointer"
             >
-              Modifier
+              {isExisting ? "Remplacer" : "Modifier"}
             </label>
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              className="flex-1 text-xs text-center text-red-500 hover:text-red-700"
-            >
-              Supprimer
-            </button>
+            {!isExisting && (
+              <button
+                type="button"
+                onClick={() => onChange(null)}
+                className="flex-1 text-xs text-center text-red-500 hover:text-red-700"
+              >
+                Supprimer
+              </button>
+            )}
           </div>
+          {isExisting && (
+            <p className="text-xs text-center text-gray-400 mt-0.5">Photo existante — conservée</p>
+          )}
         </>
       ) : (
         <label

@@ -172,7 +172,8 @@ export default function RavitaillementVehiculePage() {
   const [form, setForm] = useState<RavitaillementFormState>(initialFormState);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const isViewer = user?.role === "viewer";
+  const isDG     = user?.role === "signataire" && user?.circuit_role === "directeur_general";
+  const isViewer = user?.role === "viewer" || isDG;
 
   const displayedRavitaillements = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -280,7 +281,7 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
     const rowsHtml = selectedRavitaillements
       .map(
         (item, index) => `
@@ -326,8 +327,8 @@ export default function RavitaillementVehiculePage() {
               margin-bottom: 18px;
             }
             .print-header img {
-              width: 92px;
-              height: 92px;
+              width: 150px;
+              height: 150px;
               object-fit: contain;
               flex-shrink: 0;
             }
@@ -406,7 +407,7 @@ export default function RavitaillementVehiculePage() {
               <h3>Direction Générale</h3>
               <h4>Cellule de Contrôle, Suivi &amp; Évaluation</h4>
             </div>
-            <div style="width: 92px;"></div>
+            <div style="width: 150px;"></div>
           </div>
           <h1>Ravitaillements selectionnes</h1>
           <div class="summary">
@@ -503,7 +504,7 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
     const zone = allZones[0] ?? "—";
     const isCdpe = normalizeZone(zone) === "cpde";
     const today = new Date().toLocaleDateString("fr-FR");
@@ -553,7 +554,7 @@ export default function RavitaillementVehiculePage() {
             /* En-tête du document (une seule fois, hors tableau) */
             .doc-header { display: flex; align-items: center; justify-content: space-between;
                           gap: 16px; margin-bottom: 4px; }
-            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; }
+            .doc-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
             .doc-header-info p { margin: 2px 0; font-size: 13px; }
             .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
             .doc-title { text-align: center; font-size: 15px; font-weight: 700;
@@ -593,6 +594,7 @@ export default function RavitaillementVehiculePage() {
             <div class="doc-date">Date : ${today}</div>
           </div>
           <div class="doc-title">Situation des dépenses carburant</div>
+          <p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>
           <table>
             <thead>
               <tr>
@@ -634,7 +636,7 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const logoUrl = `${window.location.origin}/rimatel-logo.jpeg`;
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
 
     const sorted = [...selectedRavitaillements].sort((a, b) =>
       (a.vehicule?.zone ?? "").localeCompare(b.vehicule?.zone ?? "", "fr")
@@ -650,14 +652,11 @@ export default function RavitaillementVehiculePage() {
       const itemZone = item.vehicule?.zone ?? "";
       const itemIsCdpe = normalizeZone(itemZone) === "cpde";
       const bonHeaderInfo = itemIsCdpe
-        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p>`
-        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p>`;
+        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`
+        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
       const qrImg = qrMap[item.id]
-        ? `<div style="text-align:center;flex-shrink:0;">
-             <img src="${qrMap[item.id]}" alt="QR Code" style="width:72px;height:72px;display:block;" />
-             <p style="font-size:8px;margin:2px 0 0;color:#374151;">Scannez pour vérifier</p>
-           </div>`
-        : "";
+        ? `<img src="${qrMap[item.id]}" alt="QR Code" class="bon-qr" />`
+        : `<div style="width:150px;height:150px;flex-shrink:0;"></div>`;
       return `
         <div class="bon">
           <div class="bon-header">
@@ -755,8 +754,10 @@ export default function RavitaillementVehiculePage() {
             .page-break { page-break-after: always; }
             .bon { height: 138.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
-            .bon-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
-            .bon-header img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
+            .bon-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+            .bon-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .bon-qr { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .bon-header-info { flex: 1; text-align: center; }
             .bon-header-info p { margin: 2px 0; font-size: 16px; }
             .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
             .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }

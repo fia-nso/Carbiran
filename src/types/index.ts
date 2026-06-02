@@ -15,6 +15,7 @@ export interface User {
   prenom?: string | null;
   role: AppRole;
   departement?: string | null;
+  circuit_role?: string | null;
 }
 
 // --- Workflow ravitaillement ---
@@ -34,6 +35,7 @@ export interface DemandeRavitaillement {
   id: string;
   departement: string;
   statut: StatutDemande;
+  situation_soumise?: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;

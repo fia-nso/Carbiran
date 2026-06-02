@@ -50,7 +50,8 @@ export default function VehiculePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null);
   const [form, setForm] = useState<VehiculeFormState>(initialFormState);
-  const isViewer = user?.role === "viewer";
+  const isDG     = user?.role === "signataire" && user?.circuit_role === "directeur_general";
+  const isViewer = user?.role === "viewer" || isDG;
 
   const stats = {
     total: vehicules.length,

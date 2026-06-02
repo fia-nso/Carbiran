@@ -26,6 +26,7 @@ interface DemandeRow {
   id: string;
   departement: string;
   statut: string;
+  situation_soumise: boolean | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -63,6 +64,7 @@ function mapDemandeRow(row: DemandeRow): DemandeRavitaillement {
     id: row.id,
     departement: row.departement,
     statut: row.statut as StatutDemande,
+    situation_soumise: row.situation_soumise ?? false,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -80,6 +82,7 @@ const DEMANDE_SELECT = `
   id,
   departement,
   statut,
+  situation_soumise,
   created_by,
   created_at,
   updated_at,
@@ -393,34 +396,7 @@ export function useDemandes() {
 
   const retournerRavitaillement = useCallback(
     async (demandeVehiculeId: string, demandeId: string, matricule?: string) => {
-      // 1. Récupère les URLs des photos avant de les supprimer
-      const { data: photos } = await supabase
-        .from("photos_justification")
-        .select("url, id")
-        .eq("demande_vehicule_id", demandeVehiculeId);
-
-      // 2. Supprime les fichiers du storage
-      if (photos && photos.length > 0) {
-        const paths = photos
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((p: any) => {
-            const parts = (p.url as string).split("/ravitaillement-photos/");
-            return parts[1] ?? "";
-          })
-          .filter(Boolean);
-
-        if (paths.length > 0) {
-          await supabase.storage.from("ravitaillement-photos").remove(paths);
-        }
-
-        // 3. Supprime les enregistrements en base
-        await supabase
-          .from("photos_justification")
-          .delete()
-          .eq("demande_vehicule_id", demandeVehiculeId);
-      }
-
-      // 4. Remet le véhicule en attente (guard contre double-appel)
+      // Remet le véhicule en attente — les photos restent en base pour la station
       const { error: updateErr } = await supabase
         .from("demande_vehicules")
         .update({ statut: "en_attente", montant: null, n_liter: null, kilometrage: null })

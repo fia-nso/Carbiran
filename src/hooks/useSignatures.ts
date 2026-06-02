@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/supabaseClient";
 import { notifyByRole } from "@/lib/notifications";
+// import { sendSignatureEmail } from "@/lib/sendEmail"; // TODO: réactiver après config DNS rimatel.mr
 
 // ---------------------------------------------------------------------------
 // Types publics
@@ -48,15 +49,10 @@ export const CIRCUIT_BONS: CircuitStep[] = [
 // ---------------------------------------------------------------------------
 
 /** Détermine le rôle du circuit pour un utilisateur donné. */
-export function getCircuitRole(userRole: string, email: string | null): string | null {
+export function getCircuitRole(userRole: string, circuitRole?: string | null): string | null {
   if (userRole === "chef_departement") return "chef_departement";
   if (userRole === "Admin" || userRole === "MENAGER") return "chef_cellule";
-  if (userRole === "signataire") {
-    const e = (email ?? "").toLowerCase();
-    if (e.includes("dt")) return "directeur_technique";
-    if (e.includes("dg")) return "directeur_general";
-    if (e.includes("df")) return "directrice_financiere";
-  }
+  if (userRole === "signataire" && circuitRole) return circuitRole;
   return null;
 }
 
@@ -150,7 +146,7 @@ export function useSignatures() {
   // -------------------------------------------------------------------------
 
   const signerSituation = useCallback(
-    async (demandeId: string, role: string, ordre: number): Promise<void> => {
+    async (demandeId: string, role: string, ordre: number, _departement = ""): Promise<void> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non connecté");
 
@@ -185,6 +181,21 @@ export function useSignatures() {
           void notifyByRole("MENAGER", msg, "signature_requise", demandeId);
         }
       }
+
+      // TODO: réactiver après config DNS rimatel.mr
+      // if (role === "chef_departement") {
+      //   void sendSignatureEmail("dt@rimatel.mr", "Directeur Technique", demandeId, departement,
+      //     "La situation des dépenses carburant est prête pour votre signature.");
+      // } else if (role === "directeur_technique") {
+      //   void sendSignatureEmail(celluleEmail, "Chef Cellule CSÉ", demandeId, departement,
+      //     "La situation des dépenses carburant est prête pour votre signature.");
+      // } else if (role === "chef_cellule") {
+      //   void sendSignatureEmail("dg@rimatel.mr", "Directeur Général", demandeId, departement,
+      //     "La situation et les bons de carburant sont prêts pour votre signature.");
+      // } else if (role === "directeur_general") {
+      //   void sendSignatureEmail("df@rimatel.mr", "Directrice Financière", demandeId, departement,
+      //     "La situation des dépenses carburant est prête pour votre signature finale.");
+      // }
     },
     [fetchSignaturesSituation]
   );
@@ -194,7 +205,7 @@ export function useSignatures() {
   // -------------------------------------------------------------------------
 
   const signerBons = useCallback(
-    async (demandeId: string, role: string, ordre: number): Promise<void> => {
+    async (demandeId: string, role: string, ordre: number, _departement = ""): Promise<void> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non connecté");
 
@@ -229,6 +240,15 @@ export function useSignatures() {
           void notifyByRole("MENAGER", msg, "signature_requise", demandeId);
         }
       }
+
+      // TODO: réactiver après config DNS rimatel.mr
+      // if (role === "chef_departement") {
+      //   void sendSignatureEmail(celluleEmail, "Chef Cellule CSÉ", demandeId, departement,
+      //     "Les bons de carburant sont prêts pour votre signature.");
+      // } else if (role === "chef_cellule") {
+      //   void sendSignatureEmail("dg@rimatel.mr", "Directeur Général", demandeId, departement,
+      //     "Les bons de carburant sont prêts pour votre VISA.");
+      // }
     },
     [fetchSignaturesSituation]
   );

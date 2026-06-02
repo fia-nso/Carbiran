@@ -1,6 +1,6 @@
 // src/routers/index.tsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import ScrollToTop from "./ScrollToTop";
 import LoginPage from "../pages/Auth/LoginPage";
 import RootLayout from "../pages/layout";
@@ -41,6 +41,28 @@ function DefaultRedirect() {
   return <Navigate to="/demandes" replace />;
 }
 
+// Autorise Admin, MENAGER et le DG (signataire dont l'email contient 'dg').
+function RequireAdminOrDG() {
+  const { user, loading } = useAuthContext();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-green-600 rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  const isDG = user.role === "signataire" && user.circuit_role === "directeur_general";
+  if (user.role !== "Admin" && user.role !== "MENAGER" && !isDG) {
+    return <Navigate to="/demandes" replace />;
+  }
+
+  return <Outlet />;
+}
+
 const AppRouter: React.FC = () => {
   return (
     <BrowserRouter>
@@ -58,8 +80,8 @@ const AppRouter: React.FC = () => {
               {/* Redirection intelligente selon le rôle */}
               <Route index element={<DefaultRedirect />} />
 
-              {/* Admin + MENAGER uniquement */}
-              <Route element={<RequireRole roles={["Admin", "MENAGER"]} />}>
+              {/* Admin, MENAGER et DG (lecture seule) */}
+              <Route element={<RequireAdminOrDG />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
                 <Route path="/vehicules" element={<VehiculePage />} />

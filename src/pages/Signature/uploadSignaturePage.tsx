@@ -14,7 +14,7 @@ export default function UploadSignaturePage() {
   const [error, setError]             = useState<string | null>(null);
   const inputRef                      = useRef<HTMLInputElement>(null);
 
-  const circuitRole = user ? getCircuitRole(user.role, user.email ?? null) : null;
+  const circuitRole = user ? getCircuitRole(user.role, user.circuit_role) : null;
 
   // Charge la signature existante
   useEffect(() => {
