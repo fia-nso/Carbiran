@@ -174,6 +174,8 @@ export default function BonVerificationPage() {
       }
     }
 
+    console.log('signatures chargées:', sigEntries);
+
     setBon({
       id:           d.id,
       demande_id:   d.demande_id,
@@ -302,12 +304,15 @@ export default function BonVerificationPage() {
                     {step.label}
                   </p>
                   <div className="w-full h-16 flex items-center justify-center border-b border-gray-400">
-                    {sig?.signature_url && (
+                    {sig?.signature_url ? (
                       <img
                         src={sig.signature_url}
                         alt={step.label}
-                        className="max-h-14 max-w-full object-contain"
+                        crossOrigin="anonymous"
+                        className="max-h-14 max-w-full h-auto w-auto object-contain"
                       />
+                    ) : (
+                      <span className="text-[10px] text-gray-400 italic">Non signé</span>
                     )}
                   </div>
                   {sig?.signe_le && (

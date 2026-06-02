@@ -327,8 +327,8 @@ export default function RavitaillementVehiculePage() {
               margin-bottom: 18px;
             }
             .print-header img {
-              width: 150px;
-              height: 150px;
+              width: 80px;
+              height: 80px;
               object-fit: contain;
               flex-shrink: 0;
             }
@@ -344,16 +344,16 @@ export default function RavitaillementVehiculePage() {
               color: #111827;
             }
             .print-header-text h2 {
-              font-size: 22px;
+              font-size: 20px;
               letter-spacing: 0.04em;
             }
             .print-header-text h3 {
-              font-size: 18px;
-              margin-top: 6px;
+              font-size: 16px;
+              margin-top: 4px;
             }
             .print-header-text h4 {
-              font-size: 17px;
-              margin-top: 6px;
+              font-size: 15px;
+              margin-top: 4px;
             }
             h1 {
               margin: 0 0 8px;
@@ -407,7 +407,7 @@ export default function RavitaillementVehiculePage() {
               <h3>Direction Générale</h3>
               <h4>Cellule de Contrôle, Suivi &amp; Évaluation</h4>
             </div>
-            <div style="width: 150px;"></div>
+            <div style="width: 80px;"></div>
           </div>
           <h1>Ravitaillements selectionnes</h1>
           <div class="summary">
@@ -554,7 +554,7 @@ export default function RavitaillementVehiculePage() {
             /* En-tête du document (une seule fois, hors tableau) */
             .doc-header { display: flex; align-items: center; justify-content: space-between;
                           gap: 16px; margin-bottom: 4px; }
-            .doc-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .doc-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 4px; padding: 4px; background: white; }
             .doc-header-info p { margin: 2px 0; font-size: 13px; }
             .doc-date { font-size: 13px; text-align: right; white-space: nowrap; }
             .doc-title { text-align: center; font-size: 15px; font-weight: 700;
@@ -656,7 +656,7 @@ export default function RavitaillementVehiculePage() {
         : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
       const qrImg = qrMap[item.id]
         ? `<img src="${qrMap[item.id]}" alt="QR Code" class="bon-qr" />`
-        : `<div style="width:150px;height:150px;flex-shrink:0;"></div>`;
+        : `<div style="width:80px;height:80px;flex-shrink:0;"></div>`;
       return `
         <div class="bon">
           <div class="bon-header">
@@ -754,11 +754,11 @@ export default function RavitaillementVehiculePage() {
             .page-break { page-break-after: always; }
             .bon { height: 138.5mm; display: flex; flex-direction: column; padding: 8mm 12mm; overflow: hidden; }
             .separator { height: 0; border-top: 2px dashed #9ca3af; width: 100%; }
-            .bon-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-            .bon-header img { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
-            .bon-qr { width: 150px; height: 150px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 8px; padding: 8px; background: white; }
+            .bon-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+            .bon-header img { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 4px; padding: 4px; background: white; }
+            .bon-qr { width: 80px; height: 80px; object-fit: contain; flex-shrink: 0; border: 2px solid #166534; border-radius: 4px; padding: 4px; background: white; }
             .bon-header-info { flex: 1; text-align: center; }
-            .bon-header-info p { margin: 2px 0; font-size: 16px; }
+            .bon-header-info p { margin: 2px 0; font-size: 13px; }
             .bon-frame { border: 2px solid #1f2937; padding: 8px 14px 12px; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
             .dotted-line { border-top: 1px dashed #374151; margin: 5px 0; }
             .bon-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 0; }
@@ -768,10 +768,10 @@ export default function RavitaillementVehiculePage() {
             .field-value { font-size: 14px; flex: 1; }
             .field-bold .field-label,
             .field-bold .field-value { font-weight: 700; font-size: 15px; }
-            .bon-signatures { display: flex; gap: 12px; margin-top: 12px; justify-content: space-around; }
-            .bon-sig { flex: 1; text-align: center; }
-            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
-            .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
+            .bon-signatures { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+            .bon-sig { display: flex; align-items: center; gap: 12px; }
+            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; width: 220px; flex-shrink: 0; text-align: left; }
+            .bon-sig-space { flex: 1; border-bottom: 1px solid #374151; height: 24px; }
             @media print {
               @page { size: A4 portrait; margin: 0mm; }
               body { margin: 10mm; padding: 0; }
