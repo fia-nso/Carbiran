@@ -95,6 +95,7 @@ export default function BonVerificationPage() {
   const [notFound, setNotFound] = useState(false);
   const [bon, setBon]           = useState<BonData | null>(null);
   const [sigs, setSigs]         = useState<SigEntry[]>([]);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -103,101 +104,117 @@ export default function BonVerificationPage() {
   }, [id]);
 
   async function fetchData() {
+    console.log("[FetchData] Démarrage pour ID:", id);
     setLoading(true);
 
-    // 1. Charge le bon avec vehicule + demande
-    const { data, error } = await supabase
-      .from("demande_vehicules")
-      .select(`
-        id, montant, n_liter, statut, demande_id,
-        demandes_ravitaillement (created_at, departement),
-        vehicules (matricule, vehicule, chauffeur_responsable)
-      `)
-      .eq("id", id)
-      .single();
+    try {
+      // 1. Charge le bon avec vehicule + demande
+      const { data, error } = await supabase
+        .from("demande_vehicules")
+        .select(`
+          id, montant, n_liter, statut, demande_id,
+          demandes_ravitaillement (created_at, departement),
+          vehicules (matricule, vehicule, chauffeur_responsable)
+        `)
+        .eq("id", id)
+        .single();
 
-    if (error || !data) {
-      setNotFound(true);
+      if (error || !data) {
+        console.error("[FetchData] Erreur ou données manquantes pour le bon:", error);
+        setNotFound(true);
+        setLoading(false);
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = data as any;
+      const demande  = Array.isArray(d.demandes_ravitaillement) ? d.demandes_ravitaillement[0] : d.demandes_ravitaillement;
+      const vehicule = Array.isArray(d.vehicules)               ? d.vehicules[0]               : d.vehicules;
+
+      console.log("[FetchData] Bon chargé. Demande ID:", d.demande_id);
+
+      // 2. Détermine le numéro du bon (même tri par zone que la fonction d'impression)
+      const { data: allDv } = await supabase
+        .from("demande_vehicules")
+        .select("id, vehicules(zone)")
+        .eq("demande_id", d.demande_id)
+        .eq("statut", "valide");
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sorted = (allDv ?? []).sort((a: any, b: any) => {
+        const za = (Array.isArray(a.vehicules) ? a.vehicules[0] : a.vehicules)?.zone ?? "";
+        const zb = (Array.isArray(b.vehicules) ? b.vehicules[0] : b.vehicules)?.zone ?? "";
+        return za.localeCompare(zb, "fr");
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const idx = sorted.findIndex((v: any) => v.id === id);
+
+      // 3. Signatures circuit bons : signatures_situation → user_id → signatures_utilisateurs → signature_url
+      const { data: sigsRaw, error: sigsError } = await supabase
+        .from("signatures_situation")
+        .select("role, signe_le, user_id")
+        .eq("demande_id", d.demande_id)
+        .eq("circuit", "bons");
+
+      if (sigsError) {
+        console.error("[FetchData] Erreur signatures_situation:", sigsError);
+      }
+
+      const sigEntries: SigEntry[] = [];
+      if (sigsRaw && sigsRaw.length > 0) {
+        const rows = sigsRaw as { role: string; signe_le: string; user_id: string }[];
+        const userIds = rows.map((s) => s.user_id);
+        console.log("[FetchData] Signatures brutes:", rows.length, "User IDs:", userIds);
+
+        const { data: userSigs, error: userSigsError } = await supabase
+          .from("signatures_utilisateurs")
+          .select("user_id, signature_url")
+          .in("user_id", userIds);
+
+        if (userSigsError) {
+          console.error("[FetchData] Erreur signatures_utilisateurs:", userSigsError);
+        }
+
+        const urlByUser: Record<string, string | null> = {};
+        for (const u of (userSigs ?? []) as { user_id: string; signature_url: string | null }[]) {
+          urlByUser[u.user_id] = u.signature_url;
+        }
+
+        for (const s of rows) {
+          sigEntries.push({
+            role:          s.role,
+            signe_le:      s.signe_le,
+            signature_url: urlByUser[s.user_id] ?? null,
+          });
+        }
+      } else {
+        console.warn("[FetchData] Aucune signature trouvée pour cette demande.");
+      }
+
+      console.log("[FetchData] Signatures finales chargées:", sigEntries);
+
+      setBon({
+        id:           d.id,
+        demande_id:   d.demande_id,
+        montant:      d.montant   ?? 0,
+        n_liter:      d.n_liter   ?? 0,
+        statut:       d.statut    ?? "en_attente",
+        matricule:    vehicule?.matricule             ?? "—",
+        typeVehicule: vehicule?.vehicule              ?? "—",
+        chauffeur:    vehicule?.chauffeur_responsable ?? "—",
+        departement:  demande?.departement            ?? "—",
+        date:         demande?.created_at
+          ? new Date(demande.created_at).toLocaleDateString("fr-FR")
+          : "—",
+        bonNum: idx >= 0 ? idx + 1 : 1,
+      });
+      setSigs(sigEntries);
+    } catch (err) {
+      console.error("[FetchData] Erreur inattendue:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = data as any;
-    const demande  = Array.isArray(d.demandes_ravitaillement) ? d.demandes_ravitaillement[0] : d.demandes_ravitaillement;
-    const vehicule = Array.isArray(d.vehicules)               ? d.vehicules[0]               : d.vehicules;
-
-    // 2. Détermine le numéro du bon (même tri par zone que la fonction d'impression)
-    const { data: allDv } = await supabase
-      .from("demande_vehicules")
-      .select("id, vehicules(zone)")
-      .eq("demande_id", d.demande_id)
-      .eq("statut", "valide");
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sorted = (allDv ?? []).sort((a: any, b: any) => {
-      const za = (Array.isArray(a.vehicules) ? a.vehicules[0] : a.vehicules)?.zone ?? "";
-      const zb = (Array.isArray(b.vehicules) ? b.vehicules[0] : b.vehicules)?.zone ?? "";
-      return za.localeCompare(zb, "fr");
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const idx = sorted.findIndex((v: any) => v.id === id);
-
-    // 3. Signatures circuit bons : signatures_situation → user_id → signatures_utilisateurs → signature_url
-    const { data: sigsRaw } = await supabase
-      .from("signatures_situation")
-      .select("role, signe_le, user_id")
-      .eq("demande_id", d.demande_id)
-      .eq("circuit", "bons");
-
-    const sigEntries: SigEntry[] = [];
-    if (sigsRaw && sigsRaw.length > 0) {
-      const rows = sigsRaw as { role: string; signe_le: string; user_id: string }[];
-      const userIds = rows.map((s) => s.user_id);
-
-      const { data: userSigs } = await supabase
-        .from("signatures_utilisateurs")
-        .select("user_id, signature_url")
-        .in("user_id", userIds);
-
-      const urlByUser: Record<string, string | null> = {};
-      for (const u of (userSigs ?? []) as { user_id: string; signature_url: string | null }[]) {
-        urlByUser[u.user_id] = u.signature_url;
-      }
-
-      for (const s of rows) {
-        sigEntries.push({
-          role:          s.role,
-          signe_le:      s.signe_le,
-          signature_url: urlByUser[s.user_id] ?? null,
-        });
-      }
-    }
-
-    console.log('signatures chargées:', sigEntries);
-
-    setBon({
-      id:           d.id,
-      demande_id:   d.demande_id,
-      montant:      d.montant   ?? 0,
-      n_liter:      d.n_liter   ?? 0,
-      statut:       d.statut    ?? "en_attente",
-      matricule:    vehicule?.matricule             ?? "—",
-      typeVehicule: vehicule?.vehicule              ?? "—",
-      chauffeur:    vehicule?.chauffeur_responsable ?? "—",
-      departement:  demande?.departement            ?? "—",
-      date:         demande?.created_at
-        ? new Date(demande.created_at).toLocaleDateString("fr-FR")
-        : "—",
-      bonNum: idx >= 0 ? idx + 1 : 1,
-    });
-    setSigs(sigEntries);
-    setLoading(false);
   }
-
-  // ---------------------------------------------------------------------------
-  // États de chargement / non trouvé
-  // ---------------------------------------------------------------------------
 
   if (loading) {
     return (
@@ -207,7 +224,7 @@ export default function BonVerificationPage() {
     );
   }
 
-  if (notFound) {
+  if (notFound || !bon) {
     return (
       <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center px-4 text-center gap-6">
         <img
@@ -226,26 +243,22 @@ export default function BonVerificationPage() {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Affichage du bon complet
-  // ---------------------------------------------------------------------------
-
-  const isCdpe       = normalizeZone(bon!.departement) === "cpde";
+  const isCdpe       = normalizeZone(bon.departement) === "cpde";
   const dirLine1     = isCdpe ? "Direction Générale" : "Direction Technique";
   const dirLine2     = isCdpe
     ? "La Cellule de Pilotage de déploiement et des extensions"
-    : bon!.departement;
+    : bon.departement;
 
   const getSig = (role: string) => sigs.find((s) => s.role === role);
 
   const fields: [string, string][] = [
-    ["Date",                             bon!.date],
-    ["Matricule du véhicule",            bon!.matricule],
-    ["Type de Voiture",                  bon!.typeVehicule],
-    ["Nom du conducteur",                bon!.chauffeur],
-    ["Quantité de carburant (Litres)",   formatNumber(bon!.n_liter)],
-    ["Montant",                          `${formatNumber(bon!.montant)} MRU`],
-    ["Montant en lettres",               numberToWordsFr(bon!.montant)],
+    ["Date",                             bon.date],
+    ["Matricule du véhicule",            bon.matricule],
+    ["Type de Voiture",                  bon.typeVehicule],
+    ["Nom du conducteur",                bon.chauffeur],
+    ["Quantité de carburant (Litres)",   formatNumber(bon.n_liter)],
+    ["Montant",                          `${formatNumber(bon.montant)} MRU`],
+    ["Montant en lettres",               numberToWordsFr(bon.montant)],
     ["Station-service",                  ""],
     ["Signature du responsable Station", ""],
   ];
@@ -275,7 +288,7 @@ export default function BonVerificationPage() {
         {/* Titre du bon */}
         <div className="px-5 py-3 border-b border-dashed border-gray-400">
           <p className="text-center font-bold text-base sm:text-lg uppercase tracking-wide text-gray-900">
-            BON DE CARBURANT N° : {bon!.bonNum}
+            BON DE CARBURANT N° : {bon.bonNum}
           </p>
         </div>
 
@@ -298,21 +311,31 @@ export default function BonVerificationPage() {
           <div className="grid grid-cols-3 gap-3">
             {CIRCUIT_BONS.map((step) => {
               const sig = getSig(step.role);
+              const hasUrl = !!sig?.signature_url;
+              const hasError = !!imageErrors[step.role];
+              console.log(`[Render] Visa: ${step.role}, hasUrl: ${hasUrl}, hasError: ${hasError}`);
+
               return (
                 <div key={step.role} className="flex flex-col items-center text-center">
                   <p className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-2 leading-tight">
                     {step.label}
                   </p>
-                  <div className="w-full h-16 flex items-center justify-center border-b border-gray-400">
-                    {sig?.signature_url ? (
+                  <div className="w-full h-16 flex items-center justify-center border-b border-gray-400 relative">
+                    {hasUrl && !hasError ? (
                       <img
-                        src={sig.signature_url}
+                        src={sig!.signature_url!}
                         alt={step.label}
                         crossOrigin="anonymous"
                         className="max-h-14 max-w-full h-auto w-auto object-contain"
+                        onError={() => {
+                          console.error(`[ImageError] Échec pour ${step.role}. URL: ${sig?.signature_url}`);
+                          setImageErrors(prev => ({ ...prev, [step.role]: true }));
+                        }}
                       />
                     ) : (
-                      <span className="text-[10px] text-gray-400 italic">Non signé</span>
+                      <span className="text-[10px] text-gray-400 italic">
+                        { (hasUrl && hasError) ? "Erreur image" : "Non signé" }
+                      </span>
                     )}
                   </div>
                   {sig?.signe_le && (

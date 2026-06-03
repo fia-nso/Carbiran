@@ -609,6 +609,19 @@ export default function DetailDemandePage() {
     }
   }
 
+  const preloadImages = (urls: string[]): Promise<void> =>
+    Promise.all(
+      urls.map(
+        url =>
+          new Promise<void>(resolve => {
+            const img = new Image()
+            img.onload = () => resolve()
+            img.onerror = () => resolve()
+            img.src = url
+          })
+      )
+    ).then(() => {})
+
   // Helper : image de signature dans le HTML des impressions
   function sigImgHtml(sigs: SignatureSituation[], role: string): string {
     const url = sigs.find((s) => s.role === role)?.signature_url ?? null;
@@ -622,13 +635,19 @@ export default function DetailDemandePage() {
   // Print — Situation
   // -------------------------------------------------------------------------
 
-  function handlePrintSituation() {
+  async function handlePrintSituation() {
     if (!demande) return;
     const items = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
     if (items.length === 0) {
       alert("Aucun véhicule validé pour le moment.");
       return;
     }
+
+    await fetchSignaturesSituation(demande.id);
+    const urlsSituation = signaturesSituation
+      .map(s => s.signature_url)
+      .filter((u): u is string => !!u)
+    await preloadImages(urlsSituation)
 
     const printWindow = window.open("", "_blank", "width=900,height=1200");
     if (!printWindow) {
@@ -770,6 +789,10 @@ export default function DetailDemandePage() {
 
     // Recharge les signatures fraîches avant impression
     await fetchSignaturesSituation(demande.id);
+    const urlsBons = signaturesBons
+      .map(s => s.signature_url)
+      .filter((u): u is string => !!u)
+    await preloadImages(urlsBons)
 
     console.log('signaturesBons:', signaturesBons);
     console.log('sigImgHtml chef_departement:', sigImgHtml(signaturesBons, "chef_departement"));
