@@ -532,15 +532,15 @@ export default function RavitaillementVehiculePage() {
          <p>${escapeHtml(zone)}</p>`;
 
     const signaturesHtml = isCdpe
-      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`
-      : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-space"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-space"></div></div>`;
+      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>`
+      : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>`;
 
     printWindow.document.write(`
       <!doctype html>
@@ -573,10 +573,11 @@ export default function RavitaillementVehiculePage() {
             .total-row td { border: 1px solid #374151; padding: 5px 4px;
                              font-size: 12px; font-weight: 700; }
             /* Signatures (une seule fois, après le tableau) */
-            .signatures { display: flex; gap: 12px; margin-top: 32px; }
-            .sig-block { flex: 1; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
-            .sig-space { height: 56px; border-bottom: 1px solid #374151; }
+            .signatures { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 30px; }
+            .sig-block { flex: 1; display: flex; flex-direction: column; align-items: center; min-height: 120px; }
+            .sig-title { font-weight: bold; font-size: 11px; text-align: center; margin-bottom: auto; text-transform: uppercase; }
+            .sig-image { max-width: 150px; max-height: 60px; object-fit: contain; margin-bottom: 4px; }
+            .sig-line { width: 100%; border-bottom: 1px solid black; margin-top: 4px; }
             @media print {
               @page { size: A4 landscape; margin: 0mm; }
               body { margin: 10mm; padding: 0; width: calc(297mm - 20mm); box-sizing: border-box; font-size: 11px; }
@@ -709,15 +710,15 @@ export default function RavitaillementVehiculePage() {
             <div class="bon-signatures">
               <div class="bon-sig">
                 <p class="bon-sig-title">Signature Chef Département</p>
-                <div class="bon-sig-space"></div>
+                <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">
                 <p class="bon-sig-title">VISA Chef Cellule CSÉ</p>
-                <div class="bon-sig-space"></div>
+                <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">
                 <p class="bon-sig-title">VISA Directeur Général</p>
-                <div class="bon-sig-space"></div>
+                <div class="bon-sig-line"></div>
               </div>
             </div>
           </div>
@@ -768,10 +769,10 @@ export default function RavitaillementVehiculePage() {
             .field-value { font-size: 14px; flex: 1; }
             .field-bold .field-label,
             .field-bold .field-value { font-weight: 700; font-size: 15px; }
-            .bon-signatures { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-            .bon-sig { display: flex; align-items: center; gap: 12px; }
-            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; width: 220px; flex-shrink: 0; text-align: left; }
-            .bon-sig-space { flex: 1; border-bottom: 1px solid #374151; height: 24px; }
+            .bon-signatures { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 12px; }
+            .bon-sig { flex: 1; display: flex; flex-direction: column; align-items: center; min-height: 100px; }
+            .bon-sig-title { font-weight: bold; font-size: 12px; text-align: center; margin-bottom: auto; text-transform: uppercase; }
+            .bon-sig-line { width: 100%; border-bottom: 1px solid black; margin-top: 4px; }
             @media print {
               @page { size: A4 portrait; margin: 0mm; }
               body { margin: 10mm; padding: 0; }

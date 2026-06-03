@@ -626,9 +626,9 @@ export default function DetailDemandePage() {
   function sigImgHtml(sigs: SignatureSituation[], role: string): string {
     const url = sigs.find((s) => s.role === role)?.signature_url ?? null;
     if (url) {
-      return `<img src="${url}" crossorigin="anonymous" style="max-height:48px;max-width:110px;object-fit:contain;display:block;margin:2px auto;" />`;
+      return `<img src="${url}" crossorigin="anonymous" class="sig-image" />`;
     }
-    return `<div style="height:50px;"></div>`;
+    return `<div style="flex:1;"></div>`;
   }
 
   // -------------------------------------------------------------------------
@@ -723,11 +723,11 @@ export default function DetailDemandePage() {
                         text-align: left; vertical-align: top; font-size: 11px; }
             .total-row td { border: 1px solid #374151; padding: 5px 4px;
                              font-size: 12px; font-weight: 700; }
-            .signatures { display: flex; gap: 12px; margin-top: 32px; }
-            .sig-block { flex: 1; text-align: center; }
-            .sig-title { font-weight: 700; font-size: 11px; margin: 0 0 6px; text-transform: uppercase; }
-            .sig-space { height: 56px; border-bottom: 1px solid #374151; }
-            .sig-line { border-bottom: 1px solid #374151; margin-top: 2px; }
+            .signatures { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 30px; }
+            .sig-block { flex: 1; display: flex; flex-direction: column; align-items: center; min-height: 120px; }
+            .sig-title { font-weight: bold; font-size: 11px; text-align: center; margin-bottom: auto; text-transform: uppercase; }
+            .sig-image { max-width: 150px; max-height: 60px; object-fit: contain; margin-bottom: 4px; }
+            .sig-line { width: 100%; border-bottom: 1px solid black; margin-top: 4px; }
             @media print {
               @page { size: A4 landscape; margin: 0mm; }
               body { margin: 10mm; padding: 0; width: calc(297mm - 20mm); box-sizing: border-box; font-size: 11px; }
@@ -935,11 +935,11 @@ export default function DetailDemandePage() {
             .field-row { display: flex; align-items: baseline; gap: 6px; border-bottom: 1px solid #d1d5db; padding-bottom: 4px; }
             .field-label { white-space: nowrap; font-size: 14px; flex-shrink: 0; }
             .field-value { font-size: 14px; flex: 1; }
-            .bon-signatures { display: flex; gap: 12px; margin-top: 12px; justify-content: space-around; }
-            .bon-sig { flex: 1; text-align: center; }
-            .bon-sig-title { font-weight: 700; font-size: 13px; text-transform: uppercase; margin: 0 0 6px; }
-            .bon-sig-space { height: 50px; border-bottom: 1px solid #374151; }
-            .bon-sig-line { border-bottom: 1px solid #374151; margin-top: 2px; }
+            .bon-signatures { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 12px; }
+            .bon-sig { flex: 1; display: flex; flex-direction: column; align-items: center; min-height: 100px; }
+            .bon-sig-title { font-weight: bold; font-size: 12px; text-align: center; margin-bottom: auto; text-transform: uppercase; }
+            .sig-image { max-width: 150px; max-height: 60px; object-fit: contain; margin-bottom: 4px; }
+            .bon-sig-line { width: 100%; border-bottom: 1px solid black; margin-top: 4px; }
             @media print {
               @page { size: A4 portrait; margin: 0mm; }
               body { margin: 10mm; padding: 0; }
