@@ -9,6 +9,8 @@ import {
   useSignatures,
   CIRCUIT_SITUATION,
   CIRCUIT_BONS,
+  CIRCUIT_SITUATION_DC,
+  CIRCUIT_BONS_DC,
   getCircuitRole,
   getProchainSignataire,
   hasAlreadySigned,
@@ -54,8 +56,6 @@ function formatNumber(value: number) {
     maximumFractionDigits: 2,
   }).format(value);
 }
-
-const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
 
 function escapeHtml(value: string) {
   return value
@@ -234,11 +234,12 @@ export default function DetailDemandePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
   const [successMap, setSuccessMap] = useState<Record<string, string>>({});
-  const [signingForSituation, setSigningForSituation] = useState(false);
-  const [signingForBons,      setSigningForBons]      = useState(false);
-  const [signErrorSituation,  setSignErrorSituation]  = useState<string | null>(null);
-  const [signErrorBons,       setSignErrorBons]       = useState<string | null>(null);
-  const [circuitSuccess,      setCircuitSuccess]      = useState<string | null>(null);
+  const [signingForSituation,   setSigningForSituation]   = useState(false);
+  const [signingForBons,        setSigningForBons]        = useState(false);
+  const [signErrorSituation,    setSignErrorSituation]    = useState<string | null>(null);
+  const [signErrorBons,         setSignErrorBons]         = useState<string | null>(null);
+  const [circuitSuccess,        setCircuitSuccess]        = useState<string | null>(null);
+  const [isLoadingSignatures,   setIsLoadingSignatures]   = useState(true);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
@@ -256,6 +257,7 @@ export default function DetailDemandePage() {
   const fetchDemande = useCallback(async (silent = false) => {
     if (!id) return;
     if (!silent) setLoading(true);
+    if (!silent) setIsLoadingSignatures(true);
     setFetchError(null);
     try {
       const { data, error } = await supabase
@@ -277,6 +279,8 @@ export default function DetailDemandePage() {
 
       const mapped = mapRow(data);
       setDemande(mapped);
+      await fetchSignaturesSituation(mapped.id);
+      setIsLoadingSignatures(false);
 
       const dvIds      = (mapped.demande_vehicules ?? []).map((dv) => dv.id);
       // charger aussi les photos quand dv a des valeurs (ex : retourné par cellule, statut redevenu "en_attente")
@@ -303,8 +307,9 @@ export default function DetailDemandePage() {
       setDemande(null);
     } finally {
       setLoading(false);
+      setIsLoadingSignatures(false);
     }
-  }, [id]);
+  }, [id, fetchSignaturesSituation]);
 
   useEffect(() => { void fetchDemande(); }, [fetchDemande]);
 
@@ -316,12 +321,6 @@ export default function DetailDemandePage() {
     onDvChange:     () => { void fetchDemande(true); },
     onPhotosChange: () => { void fetchDemande(true); },
   });
-
-  // Charge les signatures quand la demande est connue
-  useEffect(() => {
-    if (!demande?.id) return;
-    void fetchSignaturesSituation(demande.id);
-  }, [demande?.id, fetchSignaturesSituation]);
 
   // -------------------------------------------------------------------------
   // Load vehicule info whenever demande changes
@@ -553,7 +552,7 @@ export default function DetailDemandePage() {
     setSigningForSituation(true);
     setSignErrorSituation(null);
     try {
-      await signerSituation(demande.id, circuitRole, ordre);
+      await signerSituation(demande.id, circuitRole, ordre, demande.departement);
     } catch (e: unknown) {
       setSignErrorSituation(e instanceof Error ? e.message : "Erreur lors de la signature.");
     } finally {
@@ -566,7 +565,7 @@ export default function DetailDemandePage() {
     setSigningForBons(true);
     setSignErrorBons(null);
     try {
-      await signerBons(demande.id, circuitRole, ordre);
+      await signerBons(demande.id, circuitRole, ordre, demande.departement);
     } catch (e: unknown) {
       setSignErrorBons(e instanceof Error ? e.message : "Erreur lors de la signature.");
     } finally {
@@ -600,6 +599,10 @@ export default function DetailDemandePage() {
         .from("demandes_ravitaillement")
         .update({ situation_soumise: true })
         .eq("id", demande.id);
+      if (demande.departement === "DC") {
+        const dcMsg = `Situation DC prête pour votre signature (${count} véhicule(s) validé(s)).`;
+        void notifyByRole("signataire", dcMsg, "signature_requise", id);
+      }
       await fetchDemande();
       setCircuitSuccess("Situation soumise pour signature !");
     } catch (e: unknown) {
@@ -651,7 +654,6 @@ export default function DetailDemandePage() {
 
     const logoUrl      = `${window.location.origin}/LOGO.webp`;
     const dept         = demande.departement;
-    const isCdpe       = normalizeZone(dept) === "cpde";
     const today        = new Date().toLocaleDateString("fr-FR");
     const dateStr      = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
@@ -674,18 +676,16 @@ export default function DetailDemandePage() {
       )
       .join("");
 
-    const headerInfoHtml = isCdpe
-      ? `<p><strong>Direction Générale</strong></p>
-         <p>La Cellule de Pilotage de déploiement et des extensions</p>`
-      : `<p><strong>Direction Technique</strong></p>
+    const headerInfoHtml = `<p><strong>Direction Technique</strong></p>
          <p>${escapeHtml(dept)}</p>`;
 
     const sigs = signaturesSituation;
-    const signaturesHtml = isCdpe
-      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>
+    const isDC = dept === "DC";
+    const signaturesHtml = isDC
+      ? `<div class="sig-block"><p class="sig-title">Directeur Commercial</p>${sigImgHtml(sigs,"directeur_commercial")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>`
+         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p>${sigImgHtml(sigs,"chef_departement")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p>${sigImgHtml(sigs,"directeur_technique")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>
@@ -829,10 +829,7 @@ export default function DetailDemandePage() {
     function bonHtml(dv: DemandeVehicule, num: number) {
       const v          = vehiculesMap[dv.vehicule_id];
       const itemZone   = v?.zone ?? dept;
-      const itemIsCdpe = normalizeZone(itemZone) === "cpde";
-      const bonHeaderInfo = itemIsCdpe
-        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`
-        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
+      const bonHeaderInfo = `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
       const qrImg = qrMap[dv.id]
         ? `<img src="${qrMap[dv.id]}" alt="QR Code" class="bon-qr" />`
         : `<div style="width:80px;height:80px;flex-shrink:0;"></div>`;
@@ -879,8 +876,8 @@ export default function DetailDemandePage() {
             </div>
             <div class="bon-signatures">
               <div class="bon-sig">
-                <p class="bon-sig-title">Signature Chef Département</p>
-                ${sigImgHtml(signaturesBons, "chef_departement")}
+                <p class="bon-sig-title">${dept === "DC" ? "Directeur Commercial" : "Signature Chef Département"}</p>
+                ${dept === "DC" ? sigImgHtml(signaturesBons, "directeur_commercial") : sigImgHtml(signaturesBons, "chef_departement")}
                 <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">
@@ -1194,6 +1191,8 @@ export default function DetailDemandePage() {
             isSigning={signingForSituation}
             signError={signErrorSituation}
             onSigner={handleSignerSituation}
+            circuit={demande.departement === "DC" ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION}
+            isLoadingSignatures={isLoadingSignatures}
           />
           <BonsApercu
             demande={demande}
@@ -1203,6 +1202,8 @@ export default function DetailDemandePage() {
             isSigning={signingForBons}
             signError={signErrorBons}
             onSigner={handleSignerBons}
+            circuit={demande.departement === "DC" ? CIRCUIT_BONS_DC : CIRCUIT_BONS}
+            isLoadingSignatures={isLoadingSignatures}
           />
         </>
       )}
@@ -1301,6 +1302,8 @@ interface SituationApercuProps {
   isSigning: boolean;
   signError: string | null;
   onSigner: (role: string, ordre: number) => void;
+  circuit: CircuitStep[];
+  isLoadingSignatures: boolean;
 }
 
 function SituationApercu({
@@ -1311,30 +1314,32 @@ function SituationApercu({
   isSigning,
   signError,
   onSigner,
+  circuit,
+  isLoadingSignatures,
 }: SituationApercuProps) {
   const items      = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
   const dept       = demande.departement;
-  const isCdpe     = normalizeZone(dept) === "cpde";
+  const isDC       = dept === "DC";
   const today      = new Date().toLocaleDateString("fr-FR");
   const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
   const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
   const totalLitres  = items.reduce((sum, dv) => sum + (dv.n_liter  ?? 0), 0);
 
-  const prochainSituation = getProchainSignataire(signatures, CIRCUIT_SITUATION);
+  const prochainSituation = getProchainSignataire(signatures, circuit);
   const alreadySigned     = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
   const canSign           =
     demande.situation_soumise === true &&
     !alreadySigned &&
     userCircuitRole !== null &&
-    CIRCUIT_SITUATION.some((s) => s.role === userCircuitRole) &&
+    circuit.some((s) => s.role === userCircuitRole) &&
     prochainSituation?.role === userCircuitRole;
 
-  const sigBlocks = isCdpe
+  const sigBlocks = isDC
     ? [
-        { role: "chef_cellule",          label: "Chef de la Cellule" },
-        { role: "directrice_financiere", label: "Directrice Financière" },
+        { role: "directeur_commercial",  label: "Directeur Commercial" },
         { role: "chef_cellule",          label: "Chef Cellule CSÉ" },
         { role: "directeur_general",     label: "Directeur Général" },
+        { role: "directrice_financiere", label: "Directrice Financière" },
       ]
     : [
         { role: "chef_departement",      label: "Chef Département" },
@@ -1360,17 +1365,8 @@ function SituationApercu({
             className="w-16 h-16 object-contain flex-shrink-0"
           />
           <div className="flex-1">
-            {isCdpe ? (
-              <>
-                <p className="font-bold text-sm text-gray-900">Direction Générale</p>
-                <p className="text-sm text-gray-600">La Cellule de Pilotage de déploiement et des extensions</p>
-              </>
-            ) : (
-              <>
-                <p className="font-bold text-sm text-gray-900">Direction Technique</p>
-                <p className="text-sm text-gray-600">{dept}</p>
-              </>
-            )}
+            <p className="font-bold text-sm text-gray-900">Direction Technique</p>
+            <p className="text-sm text-gray-600">{dept}</p>
           </div>
           <div className="text-sm text-gray-700 text-right whitespace-nowrap flex-shrink-0">
             Date : {today}
@@ -1441,37 +1437,43 @@ function SituationApercu({
         )}
 
         {/* Blocs de signatures */}
-        <div
-          className="grid gap-3 pt-2"
-          style={{ gridTemplateColumns: `repeat(${sigBlocks.length}, minmax(0, 1fr))` }}
-        >
-          {sigBlocks.map((block, i) => {
-            const sig = signatures.find((s) => s.role === block.role);
-            return (
-              <div key={i} className="text-center">
-                <p className="text-xs font-bold uppercase tracking-tight mb-2 text-gray-700 leading-tight">
-                  {block.label}
-                </p>
-                <div className="h-12 flex items-end justify-center mb-1">
-                  {sig?.signature_url && (
-                    <img
-                      src={sig.signature_url}
-                      alt={block.label}
-                      className="max-h-12 max-w-full object-contain"
-                    />
-                  )}
+        {isLoadingSignatures ? (
+          <div className="flex justify-center py-4">
+            <div className="animate-spin w-6 h-6 border-4 border-gray-200 border-t-teal-500 rounded-full" />
+          </div>
+        ) : (
+          <div
+            className="grid gap-3 pt-2"
+            style={{ gridTemplateColumns: `repeat(${sigBlocks.length}, minmax(0, 1fr))` }}
+          >
+            {sigBlocks.map((block, i) => {
+              const sig = signatures.find((s) => s.role === block.role);
+              return (
+                <div key={i} className="text-center">
+                  <p className="text-xs font-bold uppercase tracking-tight mb-2 text-gray-700 leading-tight">
+                    {block.label}
+                  </p>
+                  <div className="h-12 flex items-end justify-center mb-1">
+                    {sig?.signature_url && (
+                      <img
+                        src={sig.signature_url}
+                        alt={block.label}
+                        className="max-h-12 max-w-full object-contain"
+                      />
+                    )}
+                  </div>
+                  <div className="border-b border-gray-400" />
                 </div>
-                <div className="border-b border-gray-400" />
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Bouton signer la situation — visible dès que c'est le tour de l'utilisateur */}
         {canSign && (
           <button
             onClick={() => {
-              const step = CIRCUIT_SITUATION.find((s) => s.role === userCircuitRole);
+              const step = circuit.find((s) => s.role === userCircuitRole);
               if (step) onSigner(step.role, step.ordre);
             }}
             disabled={isSigning}
@@ -1518,6 +1520,8 @@ interface BonsApercuProps {
   isSigning: boolean;
   signError: string | null;
   onSigner: (role: string, ordre: number) => void;
+  circuit: CircuitStep[];
+  isLoadingSignatures: boolean;
 }
 
 function BonsApercu({
@@ -1528,9 +1532,12 @@ function BonsApercu({
   isSigning,
   signError,
   onSigner,
+  circuit,
+  isLoadingSignatures,
 }: BonsApercuProps) {
   const items   = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
   const dept    = demande.departement;
+  const isDC    = dept === "DC";
   const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
 
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
@@ -1551,20 +1558,26 @@ function BonsApercu({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIds]);
 
-  const prochainBons  = getProchainSignataire(signatures, CIRCUIT_BONS);
+  const prochainBons  = getProchainSignataire(signatures, circuit);
   const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
   const canSignBons   =
     demande.situation_soumise === true &&
     !alreadySigned &&
     userCircuitRole !== null &&
-    CIRCUIT_BONS.some((s) => s.role === userCircuitRole) &&
+    circuit.some((s) => s.role === userCircuitRole) &&
     prochainBons?.role === userCircuitRole;
 
-  const bonSigBlocks = [
-    { role: "chef_departement",  label: "Signature Chef Département" },
-    { role: "chef_cellule",      label: "VISA Chef Cellule CSÉ" },
-    { role: "directeur_general", label: "VISA Directeur Général" },
-  ];
+  const bonSigBlocks = isDC
+    ? [
+        { role: "directeur_commercial", label: "Directeur Commercial" },
+        { role: "chef_cellule",         label: "VISA Chef Cellule CSÉ" },
+        { role: "directeur_general",    label: "VISA Directeur Général" },
+      ]
+    : [
+        { role: "chef_departement",  label: "Signature Chef Département" },
+        { role: "chef_cellule",      label: "VISA Chef Cellule CSÉ" },
+        { role: "directeur_general", label: "VISA Directeur Général" },
+      ];
 
   if (items.length === 0) return null;
 
@@ -1581,8 +1594,6 @@ function BonsApercu({
           {items.map((dv, index) => {
             const v        = vehiculesMap[dv.vehicule_id];
             const bonZone  = v?.zone ?? dept;
-            const isBonCdpe = normalizeZone(bonZone) === "cpde";
-
             return (
               <div key={dv.id} className="border-2 border-gray-800 rounded-xl overflow-hidden text-xs">
                 {/* En-tête du bon */}
@@ -1593,19 +1604,8 @@ function BonsApercu({
                     className="w-10 h-10 object-contain flex-shrink-0"
                   />
                   <div className="flex-1">
-                    {isBonCdpe ? (
-                      <>
-                        <p className="font-bold">Direction Générale</p>
-                        <p className="text-gray-600 leading-tight">
-                          La Cellule de Pilotage de déploiement et des extensions
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-bold">Direction Technique</p>
-                        <p className="text-gray-600">{bonZone}</p>
-                      </>
-                    )}
+                    <p className="font-bold">Direction Technique</p>
+                    <p className="text-gray-600">{bonZone}</p>
                   </div>
                   {qrUrls[dv.id] && (
                     <div className="flex-shrink-0 text-center">
@@ -1649,28 +1649,34 @@ function BonsApercu({
                   </div>
 
                   {/* Blocs de signatures */}
-                  <div className="grid grid-cols-3 gap-2 mt-3">
-                    {bonSigBlocks.map((block) => {
-                      const sig = signatures.find((s) => s.role === block.role);
-                      return (
-                        <div key={block.role} className="text-center">
-                          <p className="font-bold uppercase leading-tight mb-1" style={{ fontSize: "0.6rem" }}>
-                            {block.label}
-                          </p>
-                          <div className="h-8 flex items-end justify-center mb-0.5">
-                            {sig?.signature_url && (
-                              <img
-                                src={sig.signature_url}
-                                alt={block.label}
-                                className="max-h-8 max-w-full object-contain"
-                              />
-                            )}
+                  {isLoadingSignatures ? (
+                    <div className="flex justify-center py-3 mt-3">
+                      <div className="animate-spin w-5 h-5 border-4 border-gray-200 border-t-teal-500 rounded-full" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      {bonSigBlocks.map((block) => {
+                        const sig = signatures.find((s) => s.role === block.role);
+                        return (
+                          <div key={block.role} className="text-center">
+                            <p className="font-bold uppercase leading-tight mb-1" style={{ fontSize: "0.6rem" }}>
+                              {block.label}
+                            </p>
+                            <div className="h-8 flex items-end justify-center mb-0.5">
+                              {sig?.signature_url && (
+                                <img
+                                  src={sig.signature_url}
+                                  alt={block.label}
+                                  className="max-h-8 max-w-full object-contain"
+                                />
+                              )}
+                            </div>
+                            <div className="border-b border-gray-600" />
                           </div>
-                          <div className="border-b border-gray-600" />
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1681,7 +1687,7 @@ function BonsApercu({
         {canSignBons && (
           <button
             onClick={() => {
-              const step = CIRCUIT_BONS.find((s) => s.role === userCircuitRole);
+              const step = circuit.find((s) => s.role === userCircuitRole);
               if (step) onSigner(step.role, step.ordre);
             }}
             disabled={isSigning}

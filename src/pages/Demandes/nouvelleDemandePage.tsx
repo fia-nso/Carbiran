@@ -22,7 +22,9 @@ export default function NouvelleDemandePage() {
   const { createDemande } = useDemandes();
   const { allVehicules, loading: vLoading } = useVehicules();
 
-  const isChefDept = user?.role === "chef_departement";
+  const isChefDept  = user?.role === "chef_departement";
+  // chef_de_cours avec département assigné (ex: Hassen/DC) → même logique que chef_departement
+  const hasDeptLock = isChefDept || (user?.role === "chef_de_cours" && !!user?.departement);
 
   // État du sélecteur uniquement pour chef_de_cours
   const [departement, setDepartement] = useState<Departement>("Zone A");
@@ -46,7 +48,7 @@ export default function NouvelleDemandePage() {
   const vehiculesDept = useMemo(
     () =>
       allVehicules.filter((v) => {
-        if (isChefDept) {
+        if (hasDeptLock) {
           if (!user?.departement) return false;
           if (normalizeZone(v.zone) !== normalizeZone(user.departement)) return false;
           if (v.centre?.trim().toUpperCase() !== "NKTT") return false;
@@ -60,7 +62,7 @@ export default function NouvelleDemandePage() {
         if (user?.role === "chef_de_cours" && v.centre?.trim().toUpperCase() !== "NKTT") return false;
         return true;
       }),
-    [allVehicules, departement, isChefDept, user?.role, user?.departement]
+    [allVehicules, departement, hasDeptLock, user?.departement]
   );
 
   const vehiculesFiltres = useMemo(
@@ -111,7 +113,7 @@ export default function NouvelleDemandePage() {
     setError(null);
     setSubmitting(true);
     try {
-      const deptToSubmit = isChefDept ? (user?.departement ?? "") : departement;
+      const deptToSubmit = hasDeptLock ? (user?.departement ?? "") : departement;
       await createDemande(deptToSubmit, [...selected], user?.role);
       navigate("/demandes");
     } catch (err: unknown) {
@@ -124,7 +126,7 @@ export default function NouvelleDemandePage() {
   // undefined = profil pas encore chargé → spinner
   // null      = profil chargé, champ departement absent en DB → message d'erreur
   // string    = prêt → afficher normalement
-  if (!user || (isChefDept && user.departement === undefined)) {
+  if (!user || (hasDeptLock && user.departement === undefined)) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="animate-spin w-7 h-7 border-4 border-gray-200 border-t-teal-500 rounded-full" />
@@ -132,7 +134,7 @@ export default function NouvelleDemandePage() {
     );
   }
 
-  if (isChefDept && user.departement === null) {
+  if (hasDeptLock && user.departement === null) {
     return (
       <div className="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0 space-y-6">
         <div className="flex items-center gap-3">
@@ -177,8 +179,8 @@ export default function NouvelleDemandePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Département : badge informatif pour chef_departement, sélecteur pour chef_de_cours */}
-        {isChefDept ? (
+        {/* Département : badge si verrou (chef_departement ou chef_de_cours avec dept assigné), sélecteur sinon */}
+        {hasDeptLock ? (
           <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 flex items-center gap-3">
             <span className="text-teal-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,7 +219,7 @@ export default function NouvelleDemandePage() {
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div>
               <p className="text-sm font-semibold text-gray-700">
-                Véhicules — {isChefDept ? (user?.departement ?? "—") : departement}
+                Véhicules — {hasDeptLock ? (user?.departement ?? "—") : departement}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
                 {selected.size} sélectionné(s)

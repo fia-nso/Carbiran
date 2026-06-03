@@ -74,15 +74,27 @@ export default function DemandesPage() {
 
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
-  const allVehicules = demandes.flatMap((d) => d.demande_vehicules ?? []);
+  const isDCDirector  = user?.role === "signataire" && user?.circuit_role === "directeur_commercial";
+  const isChefDeCours = user?.role === "chef_de_cours";
+
+  const filteredDemandes = isDCDirector
+    ? demandes.filter((d) =>
+        d.departement === "DC" &&
+        (d.statut === "validee_dept" || d.statut === "validee_station" || d.statut === "validee_cellule")
+      )
+    : isChefDeCours
+    ? demandes.filter((d) => d.created_by === user?.id)
+    : demandes;
+
+  const allVehicules = filteredDemandes.flatMap((d) => d.demande_vehicules ?? []);
   const totalVehicules = allVehicules.length;
 
   const vehiculeCounts: Record<(typeof VEHICULE_STATUT_CARDS)[number]["key"], number> = {
-    en_attente_demande: demandes
+    en_attente_demande: filteredDemandes
       .filter((d) => d.statut === "en_attente")
       .flatMap((d) => d.demande_vehicules ?? [])
       .length,
-    approuvee: demandes
+    approuvee: filteredDemandes
       .filter((d) => d.statut === "validee_dept")
       .flatMap((d) => d.demande_vehicules ?? [])
       .length,
@@ -133,14 +145,14 @@ export default function DemandesPage() {
 
       {/* List */}
       <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-        {loading && demandes.length === 0 ? (
+        {loading && filteredDemandes.length === 0 ? (
           <div className="flex items-center justify-center py-16 gap-3">
             <div className="animate-spin w-7 h-7 border-4 border-gray-200 border-t-green-500 rounded-full" />
             <span className="text-gray-500">Chargement...</span>
           </div>
         ) : error ? (
           <p className="py-12 text-center text-red-600 px-6">{error}</p>
-        ) : demandes.length === 0 ? (
+        ) : filteredDemandes.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-gray-400">Aucune demande disponible.</p>
             {canCreateDemande && (
@@ -164,7 +176,7 @@ export default function DemandesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {demandes.map((d) => (
+                  {filteredDemandes.map((d) => (
                     <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{d.departement}</td>
                       <td className="px-6 py-4 text-gray-600 text-sm">
@@ -192,7 +204,7 @@ export default function DemandesPage() {
 
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-gray-100">
-              {demandes.map((d) => (
+              {filteredDemandes.map((d) => (
                 <Link
                   key={d.id}
                   to={`/demandes/${d.id}`}

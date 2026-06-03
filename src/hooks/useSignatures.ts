@@ -39,9 +39,24 @@ export const CIRCUIT_SITUATION: CircuitStep[] = [
 
 // Circuit réduit — Bons de carburant (3 signataires)
 export const CIRCUIT_BONS: CircuitStep[] = [
-  { ordre: 1, role: "chef_departement",  label: "Signature Chef Département" },
+  { ordre: 1, role: "chef_departement",  label: "Chef Département" },
   { ordre: 2, role: "chef_cellule",      label: "VISA Chef Cellule CSÉ" },
   { ordre: 3, role: "directeur_general", label: "VISA Directeur Général" },
+];
+
+// Circuit DC — Situation des dépenses (4 signataires, sans DT)
+export const CIRCUIT_SITUATION_DC: CircuitStep[] = [
+  { ordre: 1, role: "directeur_commercial",  label: "Directeur Commercial" },
+  { ordre: 2, role: "chef_cellule",          label: "Chef Cellule CSÉ" },
+  { ordre: 3, role: "directeur_general",     label: "Directeur Général" },
+  { ordre: 4, role: "directrice_financiere", label: "Directrice Financière" },
+];
+
+// Circuit DC — Bons de carburant (3 signataires)
+export const CIRCUIT_BONS_DC: CircuitStep[] = [
+  { ordre: 1, role: "directeur_commercial", label: "Directeur Commercial" },
+  { ordre: 2, role: "chef_cellule",         label: "VISA Chef Cellule CSÉ" },
+  { ordre: 3, role: "directeur_general",    label: "VISA Directeur Général" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -146,7 +161,7 @@ export function useSignatures() {
   // -------------------------------------------------------------------------
 
   const signerSituation = useCallback(
-    async (demandeId: string, role: string, ordre: number, _departement = ""): Promise<void> => {
+    async (demandeId: string, role: string, ordre: number, departement = ""): Promise<void> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non connecté");
 
@@ -172,7 +187,8 @@ export function useSignatures() {
 
       await fetchSignaturesSituation(demandeId);
 
-      const nextStep = CIRCUIT_SITUATION[ordre]; // ordre est 1-based, index = ordre
+      const circuitSit = departement === "DC" ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION;
+      const nextStep = circuitSit[ordre]; // ordre est 1-based, index = ordre
       if (nextStep) {
         const nextAppRole = nextStep.role === "chef_cellule" ? "Admin" : "signataire";
         const msg = `Votre signature est requise pour la situation de carburant (étape ${nextStep.ordre} : ${nextStep.label})`;
@@ -205,7 +221,7 @@ export function useSignatures() {
   // -------------------------------------------------------------------------
 
   const signerBons = useCallback(
-    async (demandeId: string, role: string, ordre: number, _departement = ""): Promise<void> => {
+    async (demandeId: string, role: string, ordre: number, departement = ""): Promise<void> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non connecté");
 
@@ -231,7 +247,8 @@ export function useSignatures() {
 
       await fetchSignaturesSituation(demandeId);
 
-      const nextStep = CIRCUIT_BONS[ordre]; // ordre est 1-based, index = ordre
+      const circuitBon = departement === "DC" ? CIRCUIT_BONS_DC : CIRCUIT_BONS;
+      const nextStep = circuitBon[ordre]; // ordre est 1-based, index = ordre
       if (nextStep) {
         const nextAppRole = nextStep.role === "chef_cellule" ? "Admin" : "signataire";
         const msg = `Votre signature est requise pour les bons de carburant (étape ${nextStep.ordre} : ${nextStep.label})`;

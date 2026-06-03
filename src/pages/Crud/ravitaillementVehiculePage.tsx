@@ -500,7 +500,7 @@ export default function RavitaillementVehiculePage() {
 
     const logoUrl = `${window.location.origin}/LOGO.webp`;
     const zone = allZones[0] ?? "—";
-    const isCdpe = normalizeZone(zone) === "cpde";
+    const isDC   = normalizeZone(zone) === "dc";
     const today = new Date().toLocaleDateString("fr-FR");
     const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
 
@@ -519,17 +519,14 @@ export default function RavitaillementVehiculePage() {
       )
       .join("");
 
-    const headerInfoHtml = isCdpe
-      ? `<p><strong>Direction Générale</strong></p>
-         <p>La Cellule de Pilotage de déploiement et des extensions</p>`
-      : `<p><strong>Direction Technique</strong></p>
+    const headerInfoHtml = `<p><strong>Direction Technique</strong></p>
          <p>${escapeHtml(zone)}</p>`;
 
-    const signaturesHtml = isCdpe
-      ? `<div class="sig-block"><p class="sig-title">Chef de la Cellule</p><div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
+    const signaturesHtml = isDC
+      ? `<div class="sig-block"><p class="sig-title">Directeur Commercial</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>`
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
@@ -656,10 +653,8 @@ export default function RavitaillementVehiculePage() {
 
     function bonHtml(item: (typeof selectedRavitaillements)[0], num: number) {
       const itemZone = item.vehicule?.zone ?? "";
-      const itemIsCdpe = normalizeZone(itemZone) === "cpde";
-      const bonHeaderInfo = itemIsCdpe
-        ? `<p><strong>Direction Générale</strong></p><p>La Cellule de Pilotage de déploiement et des extensions</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`
-        : `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
+      const itemIsDC   = normalizeZone(itemZone) === "dc";
+      const bonHeaderInfo = `<p><strong>Direction Technique</strong></p><p>${escapeHtml(itemZone)}</p><p style="text-align: center; font-size: 13px; font-weight: bold; margin: 4px 0;">Centre d'appel : 28888882</p>`;
       const qrImg = qrMap[item.id]
         ? `<img src="${qrMap[item.id]}" alt="QR Code" class="bon-qr" />`
         : `<div style="width:80px;height:80px;flex-shrink:0;"></div>`;
@@ -714,7 +709,7 @@ export default function RavitaillementVehiculePage() {
             </div>
             <div class="bon-signatures">
               <div class="bon-sig">
-                <p class="bon-sig-title">Signature Chef Département</p>
+                <p class="bon-sig-title">${itemIsDC ? "Directeur Commercial" : "Signature Chef Département"}</p>
                 <div class="bon-sig-line"></div>
               </div>
               <div class="bon-sig">

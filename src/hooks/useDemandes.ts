@@ -148,7 +148,8 @@ export function useDemandes() {
       if (!userId) throw new Error("Utilisateur non connecté.");
 
       const isChefDept = role === "chef_departement";
-      const statutInitial = isChefDept ? "validee_dept" : "en_attente";
+      const isDC       = role === "chef_de_cours" && departement === "DC";
+      const statutInitial = (isChefDept || isDC) ? "validee_dept" : "en_attente";
 
       const { data: demande, error: demandeErr } = await supabase
         .from("demandes_ravitaillement")
@@ -170,11 +171,14 @@ export function useDemandes() {
 
       if (dvErr) throw dvErr;
 
-      if (isChefDept) {
+      if (isChefDept || isDC) {
         // Demande directement validée — notifier les stations
+        const msg = isDC
+          ? `Nouvelle demande DC approuvée — ravitaillement à effectuer`
+          : `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`;
         void notifyByRoles(
           ["responsable_station", "responsable_station_viewer"],
-          `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`,
+          msg,
           "validation_dept",
           demande.id
         );

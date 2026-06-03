@@ -18,6 +18,7 @@ function getRoleLabel(role: string, departement?: string | null, circuitRole?: s
     if (circuitRole === "directeur_technique")   return "Directeur Technique";
     if (circuitRole === "directeur_general")     return "Directeur Général";
     if (circuitRole === "directrice_financiere") return "Directrice Financière";
+    if (circuitRole === "directeur_commercial")  return "Directeur Commercial";
     return "Signataire";
   }
   if (role === "chef_departement")
