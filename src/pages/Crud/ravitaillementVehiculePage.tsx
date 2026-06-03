@@ -615,21 +615,25 @@ export default function RavitaillementVehiculePage() {
       </html>
     `;
 
-    const blob = new Blob([html], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    const printWindow = window.open(blobUrl, '_blank');
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenetre d'impression.");
-      URL.revokeObjectURL(blobUrl);
-      return;
-    }
-    printWindow.addEventListener('load', () => {
-      printWindow.print();
-      URL.revokeObjectURL(blobUrl);
-      printWindow.addEventListener('afterprint', () => {
-        printWindow.close();
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'fixed';
+    printIframe.style.right = '0';
+    printIframe.style.bottom = '0';
+    printIframe.style.width = '0';
+    printIframe.style.height = '0';
+    printIframe.style.border = 'none';
+    document.body.appendChild(printIframe);
+
+    const doc = printIframe.contentDocument || printIframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      printIframe.contentWindow?.addEventListener('load', () => {
+        printIframe.contentWindow?.print();
+        setTimeout(() => { document.body.removeChild(printIframe); }, 1000);
       });
-    });
+    }
   }
 
   async function handlePrintBon() {
@@ -784,21 +788,25 @@ export default function RavitaillementVehiculePage() {
       </html>
     `;
 
-    const blob = new Blob([html], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    const printWindow = window.open(blobUrl, '_blank');
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenetre d'impression.");
-      URL.revokeObjectURL(blobUrl);
-      return;
-    }
-    printWindow.addEventListener('load', () => {
-      printWindow.print();
-      URL.revokeObjectURL(blobUrl);
-      printWindow.addEventListener('afterprint', () => {
-        printWindow.close();
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'fixed';
+    printIframe.style.right = '0';
+    printIframe.style.bottom = '0';
+    printIframe.style.width = '0';
+    printIframe.style.height = '0';
+    printIframe.style.border = 'none';
+    document.body.appendChild(printIframe);
+
+    const doc = printIframe.contentDocument || printIframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      printIframe.contentWindow?.addEventListener('load', () => {
+        printIframe.contentWindow?.print();
+        setTimeout(() => { document.body.removeChild(printIframe); }, 1000);
       });
-    });
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
