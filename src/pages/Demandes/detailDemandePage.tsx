@@ -649,12 +649,6 @@ export default function DetailDemandePage() {
       .filter((u): u is string => !!u)
     await preloadImages(urlsSituation)
 
-    const printWindow = window.open("", "_blank", "width=900,height=1200");
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenêtre d'impression.");
-      return;
-    }
-
     const logoUrl      = `${window.location.origin}/LOGO.webp`;
     const dept         = demande.departement;
     const isCdpe       = normalizeZone(dept) === "cpde";
@@ -698,7 +692,7 @@ export default function DetailDemandePage() {
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>`;
 
-    printWindow.document.write(`
+    const html = `
       <!doctype html>
       <html lang="fr">
         <head>
@@ -769,10 +763,20 @@ export default function DetailDemandePage() {
           <div class="signatures">${signaturesHtml}</div>
         </body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    `;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    const printWindow = window.open(blobUrl, '_blank');
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenêtre d'impression.");
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+    printWindow.addEventListener('load', () => {
+      printWindow.print();
+      URL.revokeObjectURL(blobUrl);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -798,12 +802,6 @@ export default function DetailDemandePage() {
     console.log('sigImgHtml chef_departement:', sigImgHtml(signaturesBons, "chef_departement"));
     console.log('sigImgHtml chef_cellule:', sigImgHtml(signaturesBons, "chef_cellule"));
     console.log('sigImgHtml directeur_general:', sigImgHtml(signaturesBons, "directeur_general"));
-
-    const printWindow = window.open("", "_blank", "width=900,height=1200");
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenêtre d'impression.");
-      return;
-    }
 
     const logoUrl = `${window.location.origin}/LOGO.webp`;
     const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
@@ -910,7 +908,7 @@ export default function DetailDemandePage() {
       `);
     }
 
-    printWindow.document.write(`
+    const html = `
       <!doctype html>
       <html lang="fr">
         <head>
@@ -948,10 +946,20 @@ export default function DetailDemandePage() {
         </head>
         <body>${pages.join("")}</body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    `;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    const printWindow = window.open(blobUrl, '_blank');
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenêtre d'impression.");
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+    printWindow.addEventListener('load', () => {
+      printWindow.print();
+      URL.revokeObjectURL(blobUrl);
+    });
   }
 
   // -------------------------------------------------------------------------

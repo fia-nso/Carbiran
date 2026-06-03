@@ -498,12 +498,6 @@ export default function RavitaillementVehiculePage() {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=900,height=1200");
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenetre d'impression.");
-      return;
-    }
-
     const logoUrl = `${window.location.origin}/LOGO.webp`;
     const zone = allZones[0] ?? "—";
     const isCdpe = normalizeZone(zone) === "cpde";
@@ -542,7 +536,7 @@ export default function RavitaillementVehiculePage() {
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>`;
 
-    printWindow.document.write(`
+    const html = `
       <!doctype html>
       <html lang="fr">
         <head>
@@ -619,21 +613,25 @@ export default function RavitaillementVehiculePage() {
           <div class="signatures">${signaturesHtml}</div>
         </body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    `;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    const printWindow = window.open(blobUrl, '_blank');
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenetre d'impression.");
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+    printWindow.addEventListener('load', () => {
+      printWindow.print();
+      URL.revokeObjectURL(blobUrl);
+    });
   }
 
   async function handlePrintBon() {
     if (selectedRavitaillements.length === 0) {
       alert("Selectionnez au moins un ravitaillement a imprimer.");
-      return;
-    }
-
-    const printWindow = window.open("", "_blank", "width=900,height=1200");
-    if (!printWindow) {
-      alert("Impossible d'ouvrir la fenetre d'impression.");
       return;
     }
 
@@ -742,7 +740,7 @@ export default function RavitaillementVehiculePage() {
       `);
     }
 
-    printWindow.document.write(`
+    const html = `
       <!doctype html>
       <html lang="fr">
         <head>
@@ -781,10 +779,20 @@ export default function RavitaillementVehiculePage() {
         </head>
         <body>${pages.join("")}</body>
       </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    `;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    const printWindow = window.open(blobUrl, '_blank');
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenetre d'impression.");
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+    printWindow.addEventListener('load', () => {
+      printWindow.print();
+      URL.revokeObjectURL(blobUrl);
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
