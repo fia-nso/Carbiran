@@ -626,6 +626,9 @@ export default function RavitaillementVehiculePage() {
     printWindow.addEventListener('load', () => {
       printWindow.print();
       URL.revokeObjectURL(blobUrl);
+      printWindow.addEventListener('afterprint', () => {
+        printWindow.close();
+      });
     });
   }
 
@@ -792,6 +795,9 @@ export default function RavitaillementVehiculePage() {
     printWindow.addEventListener('load', () => {
       printWindow.print();
       URL.revokeObjectURL(blobUrl);
+      printWindow.addEventListener('afterprint', () => {
+        printWindow.close();
+      });
     });
   }
 

@@ -776,6 +776,9 @@ export default function DetailDemandePage() {
     printWindow.addEventListener('load', () => {
       printWindow.print();
       URL.revokeObjectURL(blobUrl);
+      printWindow.addEventListener('afterprint', () => {
+        printWindow.close();
+      });
     });
   }
 
@@ -959,6 +962,9 @@ export default function DetailDemandePage() {
     printWindow.addEventListener('load', () => {
       printWindow.print();
       URL.revokeObjectURL(blobUrl);
+      printWindow.addEventListener('afterprint', () => {
+        printWindow.close();
+      });
     });
   }
 
