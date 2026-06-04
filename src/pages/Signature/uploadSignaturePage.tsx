@@ -39,7 +39,7 @@ export default function UploadSignaturePage() {
     setSuccess(false);
     try {
       const url = await uploadSignatureUtilisateur(file, circuitRole);
-      setCurrentUrl(url);
+      setCurrentUrl(`${url}?t=${Date.now()}`);
       setPreviewUrl(null);
       setFile(null);
       setSuccess(true);

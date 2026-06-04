@@ -148,7 +148,27 @@ export function useSignatures() {
       .eq("demande_id", demandeId)
       .order("ordre");
 
-    const all  = (data as SignatureSituation[]) ?? [];
+    const all = (data as SignatureSituation[]) ?? [];
+
+    // Recharge les dernières URLs depuis signatures_utilisateurs
+    // pour refléter une signature re-uploadée après la signature de circuit
+    if (all.length > 0) {
+      const userIds = [...new Set(all.map((s) => s.user_id))];
+      const { data: latestSigs } = await supabase
+        .from("signatures_utilisateurs")
+        .select("user_id, signature_url")
+        .in("user_id", userIds);
+
+      const latestMap: Record<string, string | null> = {};
+      (latestSigs ?? []).forEach((s: { user_id: string; signature_url: string | null }) => {
+        latestMap[s.user_id] = s.signature_url;
+      });
+
+      all.forEach((s) => {
+        if (latestMap[s.user_id]) s.signature_url = latestMap[s.user_id];
+      });
+    }
+
     const sigsS = all.filter((s) => (s.circuit ?? "situation") !== "bons");
     const sigsB = all.filter((s) => s.circuit === "bons");
     setSignaturesSituation(sigsS);
