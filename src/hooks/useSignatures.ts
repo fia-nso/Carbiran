@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/supabaseClient";
 import { notifyByRole } from "@/lib/notifications";
-// import { sendSignatureEmail } from "@/lib/sendEmail"; // TODO: réactiver après config DNS rimatel.mr
+import { sendSignatureEmail } from "@/lib/sendEmail";
 
 // ---------------------------------------------------------------------------
 // Types publics
@@ -218,20 +218,32 @@ export function useSignatures() {
         }
       }
 
-      // TODO: réactiver après config DNS rimatel.mr
-      // if (role === "chef_departement") {
-      //   void sendSignatureEmail("dt@rimatel.mr", "Directeur Technique", demandeId, departement,
-      //     "La situation des dépenses carburant est prête pour votre signature.");
-      // } else if (role === "directeur_technique") {
-      //   void sendSignatureEmail(celluleEmail, "Chef Cellule CSÉ", demandeId, departement,
-      //     "La situation des dépenses carburant est prête pour votre signature.");
-      // } else if (role === "chef_cellule") {
-      //   void sendSignatureEmail("dg@rimatel.mr", "Directeur Général", demandeId, departement,
-      //     "La situation et les bons de carburant sont prêts pour votre signature.");
-      // } else if (role === "directeur_general") {
-      //   void sendSignatureEmail("df@rimatel.mr", "Directrice Financière", demandeId, departement,
-      //     "La situation des dépenses carburant est prête pour votre signature finale.");
-      // }
+      if (departement === "DC") {
+        if (role === "directeur_commercial") {
+          void sendSignatureEmail("ahmed.herma@rimatel.mr", "Chef Cellule CSÉ", demandeId, departement,
+            "La situation DC est prête pour votre signature.");
+        } else if (role === "chef_cellule") {
+          void sendSignatureEmail("medahab@rimatel.mr", "Directeur Général", demandeId, departement,
+            "La situation et les bons DC sont prêts pour votre signature.");
+        } else if (role === "directeur_general") {
+          void sendSignatureEmail("medahab@rimatel.mr", "Directrice Financière", demandeId, departement,
+            "La situation DC est prête pour votre signature finale.");
+        }
+      } else {
+        if (role === "chef_departement") {
+          void sendSignatureEmail("toulba@rimatel.mr", "Directeur Technique", demandeId, departement,
+            "La situation des dépenses carburant est prête pour votre signature.");
+        } else if (role === "directeur_technique") {
+          void sendSignatureEmail("ahmed.herma@rimatel.mr", "Chef Cellule CSÉ", demandeId, departement,
+            "La situation des dépenses carburant est prête pour votre signature.");
+        } else if (role === "chef_cellule") {
+          void sendSignatureEmail("medahab@rimatel.mr", "Directeur Général", demandeId, departement,
+            "La situation et les bons de carburant sont prêts pour votre signature.");
+        } else if (role === "directeur_general") {
+          void sendSignatureEmail("medahab@rimatel.mr", "Directrice Financière", demandeId, departement,
+            "La situation des dépenses carburant est prête pour votre signature finale.");
+        }
+      }
     },
     [fetchSignaturesSituation]
   );
@@ -278,14 +290,13 @@ export function useSignatures() {
         }
       }
 
-      // TODO: réactiver après config DNS rimatel.mr
-      // if (role === "chef_departement") {
-      //   void sendSignatureEmail(celluleEmail, "Chef Cellule CSÉ", demandeId, departement,
-      //     "Les bons de carburant sont prêts pour votre signature.");
-      // } else if (role === "chef_cellule") {
-      //   void sendSignatureEmail("dg@rimatel.mr", "Directeur Général", demandeId, departement,
-      //     "Les bons de carburant sont prêts pour votre VISA.");
-      // }
+      if (role === "chef_departement" || role === "directeur_commercial") {
+        void sendSignatureEmail("ahmed.herma@rimatel.mr", "Chef Cellule CSÉ", demandeId, departement,
+          "Les bons de carburant sont prêts pour votre signature.");
+      } else if (role === "chef_cellule") {
+        void sendSignatureEmail("medahab@rimatel.mr", "Directeur Général", demandeId, departement,
+          "Les bons de carburant sont prêts pour votre VISA.");
+      }
     },
     [fetchSignaturesSituation]
   );

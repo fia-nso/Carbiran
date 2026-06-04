@@ -17,11 +17,9 @@ serve(async (req) => {
     const { to, signataireName, demandeId, departement, message } =
       await req.json()
 
-    const testTo = 'popekleib@gmail.com' // TODO: remplacer par `to` (vrai destinataire)
-
     await resend.emails.send({
-      from: 'RIMATEL Carburant <onboarding@resend.dev>',
-      to: [testTo],
+      from: 'RIMATEL Carburant <carbiran@rimatel.mr>',
+      to: [to],
       subject: `[RIMATEL] Signature requise — ${departement}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
