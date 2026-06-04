@@ -18,7 +18,7 @@ import {
 import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
 import { uploadPhoto } from "@/lib/uploadPhoto";
 import { createNotification, notifyByRole, notifyByRoleAndDept } from "@/lib/notifications";
-// import { sendSignatureEmail } from "@/lib/sendEmail"; // TODO: réactiver après config DNS rimatel.mr
+import { sendSignatureEmail } from "@/lib/sendEmail";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -201,6 +201,13 @@ const PHOTO_LABELS: Record<TypePhoto, string> = {
   vehicule_avant: "Véhicule avant",
   vehicule_apres: "Véhicule après",
   pompe:          "Pompe",
+};
+
+const CHEF_DEPT_EMAILS: Record<string, string> = {
+  "Zone A": "mlcherif@rimatel.mr",
+  "FO": "ch.rabani@rimatel.mr",
+  "RX&SYS": "cheikh.ahmedou@rimatel.mr",
+  "CPDE": "sidibiha@rimatel.mr",
 };
 
 // ---------------------------------------------------------------------------
@@ -601,22 +608,31 @@ export default function DetailDemandePage() {
     setCircuitSuccess(null);
     setSubmitError(null);
     try {
-      // TODO: réactiver après config DNS rimatel.mr
-      // const { data: chefProfile } = await supabase
-      //   .from("profiles").select("email")
-      //   .eq("role", "chef_departement").eq("departement", demande.departement).maybeSingle();
-      // const chefEmail = (chefProfile as { email: string } | null)?.email;
-      // if (chefEmail) {
-      //   await sendSignatureEmail(chefEmail, "Chef Département", demande.id, demande.departement,
-      //     `La situation des dépenses carburant est prête pour votre signature. ${count} véhicule(s) validé(s).`);
-      // }
       await supabase
         .from("demandes_ravitaillement")
         .update({ situation_soumise: true })
         .eq("id", demande.id);
+
+      const emailMsg = `La situation des dépenses carburant est prête pour votre signature. ${count} véhicule(s) validé(s).`;
       if (demande.departement === "DC") {
         const dcMsg = `Situation DC prête pour votre signature (${count} véhicule(s) validé(s)).`;
         void notifyByRole("signataire", dcMsg, "signature_requise", id);
+        void sendSignatureEmail(
+          "med.ahmedsalem@rimatel.mr",
+          "Directeur Commercial",
+          demande.id,
+          demande.departement,
+          emailMsg
+        );
+      } else {
+        const fallbackEmail = CHEF_DEPT_EMAILS[demande.departement];
+        const { data: chefProfile } = await supabase
+          .from("profiles").select("email")
+          .eq("role", "chef_departement").eq("departement", demande.departement).maybeSingle();
+        const chefEmail = (chefProfile as { email: string } | null)?.email || fallbackEmail;
+        if (chefEmail) {
+          void sendSignatureEmail(chefEmail, "Chef Département", demande.id, demande.departement, emailMsg);
+        }
       }
       await fetchDemande();
       setCircuitSuccess("Situation soumise pour signature !");
