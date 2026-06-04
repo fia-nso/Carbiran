@@ -46,7 +46,8 @@ export default function ModifierDemandePage() {
   }, [id]);
 
   useEffect(() => {
-    if (user && user.role !== "chef_de_cours" && user.role !== "chef_departement") {
+    const isDirecteurCommercial = user?.role === "signataire" && user?.circuit_role === "directeur_commercial";
+    if (user && user.role !== "chef_de_cours" && user.role !== "chef_departement" && !isDirecteurCommercial) {
       navigate("/demandes", { replace: true });
     }
   }, [user, navigate]);

@@ -1118,7 +1118,7 @@ export default function DetailDemandePage() {
               {(demande.statut === "en_attente" || demande.statut === "validee_dept") &&
                 !demande.demande_vehicules?.some((dv) => dv.statut === "ravitaille" || dv.statut === "valide") && (
                   <Link
-                    to={`/demandes/${demande.id}/modifier`}
+                    to={`/demandes/${id}/modifier`}
                     className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
