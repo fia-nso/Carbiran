@@ -78,10 +78,7 @@ export default function DemandesPage() {
   const isChefDeCours = user?.role === "chef_de_cours";
 
   const filteredDemandes = isDCDirector
-    ? demandes.filter((d) =>
-        d.departement === "DC" &&
-        (d.statut === "validee_dept" || d.statut === "validee_station" || d.statut === "validee_cellule")
-      )
+    ? demandes.filter((d) => d.departement === "DC")
     : isChefDeCours
     ? demandes.filter((d) => d.created_by === user?.id)
     : demandes;

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/supabaseClient";
-import { notifyByRole, notifyByRoleAndDept, notifyByRoles } from "@/lib/notifications";
+import { createNotification, notifyByRole, notifyByRoleAndDept, notifyByRoles } from "@/lib/notifications";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -149,7 +149,7 @@ export function useDemandes() {
 
       const isChefDept = role === "chef_departement";
       const isDC       = role === "chef_de_cours" && departement === "DC";
-      const statutInitial = (isChefDept || isDC) ? "validee_dept" : "en_attente";
+      const statutInitial = isChefDept ? "validee_dept" : "en_attente";
 
       const { data: demande, error: demandeErr } = await supabase
         .from("demandes_ravitaillement")
@@ -171,15 +171,20 @@ export function useDemandes() {
 
       if (dvErr) throw dvErr;
 
-      if (isChefDept || isDC) {
+      if (isChefDept) {
         // Demande directement validée — notifier les stations
-        const msg = isDC
-          ? `Nouvelle demande DC approuvée — ravitaillement à effectuer`
-          : `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`;
         void notifyByRoles(
           ["responsable_station", "responsable_station_viewer"],
-          msg,
+          `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`,
           "validation_dept",
+          demande.id
+        );
+      } else if (isDC) {
+        // Demande DC en attente — notifier le directeur_commercial
+        void notifyByRole(
+          "signataire",
+          `Nouvelle demande DC en attente de votre approbation`,
+          "nouvelle_demande",
           demande.id
         );
       } else {
@@ -219,6 +224,41 @@ export function useDemandes() {
         "validation_dept",
         demandeId
       );
+
+      await fetchDemandes();
+    },
+    [fetchDemandes]
+  );
+
+  // -------------------------------------------------------------------------
+  // validerDemandeCommercial — directeur_commercial (DC uniquement)
+  // -------------------------------------------------------------------------
+
+  const validerDemandeCommercial = useCallback(
+    async (demandeId: string, createdBy?: string) => {
+      const { error: err } = await supabase
+        .from("demandes_ravitaillement")
+        .update({ statut: "validee_dept" })
+        .eq("id", demandeId)
+        .eq("statut", "en_attente");
+
+      if (err) throw err;
+
+      void notifyByRoles(
+        ["responsable_station", "responsable_station_viewer"],
+        `Demande DC approuvée — ravitaillement à effectuer`,
+        "validation_dept",
+        demandeId
+      );
+
+      if (createdBy) {
+        void createNotification(
+          createdBy,
+          `Votre demande DC a été approuvée.`,
+          "validation_dept",
+          demandeId
+        );
+      }
 
       await fetchDemandes();
     },
@@ -462,6 +502,7 @@ export function useDemandes() {
     fetchDemandes,
     createDemande,
     validerDemandeDept,
+    validerDemandeCommercial,
     annulerDemande,
     saisirRavitaillement,
     validerDemandeStation,
