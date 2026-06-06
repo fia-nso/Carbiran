@@ -259,6 +259,13 @@ export default function DetailDemandePage() {
   const isDirecteurCommercial  = isSignataire && user?.circuit_role === "directeur_commercial";
   const isCircuitActor         = isChefDept || isSignataire || isCellule;
 
+  const dgASigneSituation = signaturesSituation.some(
+    (s) => s.role === "directeur_general" && s.circuit === "situation"
+  );
+  const dgASigneBons = signaturesBons.some(
+    (s) => s.role === "directeur_general" && s.circuit === "bons"
+  );
+
   // -------------------------------------------------------------------------
   // Fetch demande + photos
   // -------------------------------------------------------------------------
@@ -288,8 +295,10 @@ export default function DetailDemandePage() {
 
       const mapped = mapRow(data);
       setDemande(mapped);
-      await fetchSignaturesSituation(mapped.id);
+      const sigsResult = await fetchSignaturesSituation(mapped.id);
       setIsLoadingSignatures(false);
+      console.log('signaturesSituation chargées:', sigsResult.situation);
+      console.log('signaturesBons chargées:', sigsResult.bons);
 
       const dvIds      = (mapped.demande_vehicules ?? []).map((dv) => dv.id);
       // charger aussi les photos quand dv a des valeurs (ex : retourné par cellule, statut redevenu "en_attente")
@@ -1167,8 +1176,8 @@ export default function DetailDemandePage() {
           )}
 
           {(isCircuitActor || isChefDeCours) && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
-            signaturesSituation.some((s) => s.role === "directeur_general") ? (
-              <>
+            <>
+              {dgASigneSituation ? (
                 <button
                   onClick={handlePrintSituation}
                   className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
@@ -1178,6 +1187,12 @@ export default function DetailDemandePage() {
                   </svg>
                   Imprimer situation
                 </button>
+              ) : (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                  Impression situation disponible après signature du Directeur Général
+                </p>
+              )}
+              {dgASigneBons ? (
                 <button
                   onClick={handlePrintBon}
                   className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
@@ -1187,12 +1202,12 @@ export default function DetailDemandePage() {
                   </svg>
                   Imprimer les bons
                 </button>
-              </>
-            ) : (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                Impression disponible après signature du Directeur Général
-              </p>
-            )
+              ) : (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+                  Impression bons disponible après signature du Directeur Général
+                </p>
+              )}
+            </>
           )}
 
           {demande.statut === "annulee" && (
@@ -1634,6 +1649,12 @@ function BonsApercu({
     userCircuitRole !== null &&
     circuit.some((s) => s.role === userCircuitRole) &&
     prochainBons?.role === userCircuitRole;
+
+  console.log('canSignBons:', canSignBons);
+  console.log('signaturesBons:', signatures);
+  console.log('prochainBons:', prochainBons);
+  console.log('userCircuitRole:', userCircuitRole);
+  console.log('situation_soumise:', demande.situation_soumise);
 
   const bonSigBlocks = isDC
     ? [
