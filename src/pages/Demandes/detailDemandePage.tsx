@@ -719,9 +719,9 @@ export default function DetailDemandePage() {
          <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p>${sigImgHtml(sigs,"chef_departement")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p>${sigImgHtml(sigs,"directeur_technique")}<div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p>${sigImgHtml(sigs,"chef_cellule")}<div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>`;
+         <div class="sig-block"><p class="sig-title">Directeur Général</p>${sigImgHtml(sigs,"directeur_general")}<div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p>${sigImgHtml(sigs,"directrice_financiere")}<div class="sig-line"></div></div>`;
 
     const html = `
       <!doctype html>
@@ -1412,9 +1412,9 @@ function SituationApercu({
     : [
         { role: "chef_departement",      label: "Chef Département" },
         { role: "directeur_technique",   label: "Directeur Technique" },
-        { role: "directrice_financiere", label: "Directrice Financière" },
         { role: "chef_cellule",          label: "Chef Cellule CSÉ" },
         { role: "directeur_general",     label: "Directeur Général" },
+        { role: "directrice_financiere", label: "Directrice Financière" },
       ];
 
   return (
