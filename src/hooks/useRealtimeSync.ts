@@ -1,35 +1,53 @@
 import { useEffect, useRef } from "react";
+import { supabase } from "../supabaseClient";
 
 interface Options {
   onDemandesChange?: () => void;
   onDvChange?: () => void;
   onRavitaillementChange?: () => void;
   onPhotosChange?: () => void;
-  interval?: number;
 }
 
 export function useRealtimeSync(options: Options) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
-  const isFetchingRef = useRef(false);
 
   useEffect(() => {
-    const tick = async () => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
-      try {
-        await optionsRef.current.onDemandesChange?.();
-        await optionsRef.current.onDvChange?.();
-        await optionsRef.current.onRavitaillementChange?.();
-        await optionsRef.current.onPhotosChange?.();
-      } finally {
-        isFetchingRef.current = false;
-      }
-    };
+    const channelName = `realtime-sync-${Math.random().toString(36).slice(2)}`;
 
-    const ms = options.interval ?? 30_000;
-    const id = setInterval(tick, ms);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const channel = supabase
+      .channel(channelName)
+      // demande_vehicules → onDemandesChange + onDvChange
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "demande_vehicules" },
+        () => {
+          optionsRef.current.onDemandesChange?.();
+          optionsRef.current.onDvChange?.();
+        }
+      )
+      // demandes_ravitaillement → onDemandesChange
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "demandes_ravitaillement" },
+        () => optionsRef.current.onDemandesChange?.()
+      )
+      // ravitaillements_vehicules → onRavitaillementChange
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ravitaillements_vehicules" },
+        () => optionsRef.current.onRavitaillementChange?.()
+      )
+      // photos_justification → onPhotosChange
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "photos_justification" },
+        () => optionsRef.current.onPhotosChange?.()
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, []);
 }

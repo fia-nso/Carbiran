@@ -23,6 +23,8 @@ function getRoleLabel(role: string, departement?: string | null, circuitRole?: s
   }
   if (role === "chef_departement")
     return departement ? `Chef Département ${departement}` : "Chef Département";
+  if (role === "assistant")
+    return departement ? `Assistant ${departement}` : "Assistant";
   return role;
 }
 
@@ -35,7 +37,8 @@ export default function Header() {
   const isAdmin          = user?.role === "Admin";
   const isSignataire     = user?.role === "signataire";
   const isDG             = isSignataire && user?.circuit_role === "directeur_general";
-  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
+  const isAssistant      = user?.role === "assistant";
+  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement" || isAssistant;
   const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.circuit_role) : "";
 
   const handleLogout = async () => {
