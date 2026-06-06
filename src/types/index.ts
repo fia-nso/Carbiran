@@ -6,7 +6,8 @@ export type AppRole =
   | "chef_departement"
   | "responsable_station"
   | "responsable_station_viewer"
-  | "signataire";
+  | "signataire"
+  | "assistant";
 
 export interface User {
   id: string;
@@ -22,6 +23,7 @@ export interface User {
 
 export type StatutDemande =
   | "en_attente"
+  | "soumise_assistant"
   | "validee_dept"
   | "validee_station"
   | "validee_cellule"

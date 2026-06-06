@@ -99,8 +99,8 @@ const AppRouter: React.FC = () => {
               <Route path="/demandes" element={<DemandesPage />} />
               <Route path="/demandes/:id" element={<DetailDemandePage />} />
 
-              {/* chef_de_cours et chef_departement */}
-              <Route element={<RequireRole roles={["chef_de_cours", "chef_departement"]} />}>
+              {/* chef_de_cours, chef_departement et assistant */}
+              <Route element={<RequireRole roles={["chef_de_cours", "chef_departement", "assistant"]} />}>
                 <Route path="/demandes/nouvelle" element={<NouvelleDemandePage />} />
               </Route>
 

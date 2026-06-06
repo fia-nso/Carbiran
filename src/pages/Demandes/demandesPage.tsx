@@ -42,6 +42,9 @@ function SmartStatutBadge({ d }: { d: DemandeRavitaillement }) {
   } else if (d.statut === "validee_dept" || d.statut === "validee_station") {
     label = "Approuvée";
     classes = "bg-blue-100 text-blue-800 border-blue-200";
+  } else if (d.statut === "soumise_assistant") {
+    label = "En attente du chef de département";
+    classes = "bg-amber-100 text-amber-800 border-amber-200";
   } else {
     label = "En attente d'approbation";
     classes = "bg-orange-100 text-orange-800 border-orange-200";
@@ -72,14 +75,15 @@ export default function DemandesPage() {
 
   useRealtimeSync({ onDemandesChange: fetchDemandes, onDvChange: fetchDemandes });
 
-  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
+  const isAssistant   = user?.role === "assistant";
+  const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement" || isAssistant;
 
   const isDCDirector  = user?.role === "signataire" && user?.circuit_role === "directeur_commercial";
   const isChefDeCours = user?.role === "chef_de_cours";
 
   const filteredDemandes = isDCDirector
     ? demandes.filter((d) => d.departement === "DC")
-    : isChefDeCours
+    : (isChefDeCours || isAssistant)
     ? demandes.filter((d) => d.created_by === user?.id)
     : demandes;
 
@@ -183,7 +187,11 @@ export default function DemandesPage() {
                         <SmartStatutBadge d={d} />
                       </td>
                       <td className="px-6 py-4">
-                        <DvDetailLine dvs={d.demande_vehicules} />
+                        {d.statut === "soumise_assistant" ? (
+                          <p className="text-xs text-gray-500">{d.demande_vehicules?.length ?? 0} véhicule(s)</p>
+                        ) : (
+                          <DvDetailLine dvs={d.demande_vehicules} />
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
@@ -214,7 +222,7 @@ export default function DemandesPage() {
                       {" · "}
                       {d.demande_vehicules?.length ?? 0} véhicule(s)
                     </p>
-                    <DvDetailLine dvs={d.demande_vehicules} />
+                    {d.statut !== "soumise_assistant" && <DvDetailLine dvs={d.demande_vehicules} />}
                   </div>
                   <SmartStatutBadge d={d} />
                 </Link>
