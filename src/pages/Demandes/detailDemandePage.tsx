@@ -162,12 +162,11 @@ const DETAIL_SELECT = `
 // ---------------------------------------------------------------------------
 
 const STATUT_CONFIG: Record<StatutDemande, { label: string; classes: string }> = {
-  en_attente:        { label: "En attente d'approbation",          classes: "bg-orange-100 text-orange-800 border-orange-200" },
-  soumise_assistant: { label: "En attente du chef de département",  classes: "bg-amber-100 text-amber-800 border-amber-200" },
-  validee_dept:      { label: "Approuvée",                          classes: "bg-blue-100 text-blue-800 border-blue-200" },
-  validee_station:   { label: "Ravitaillement effectué",            classes: "bg-purple-100 text-purple-800 border-purple-200" },
-  validee_cellule:   { label: "Validée",                            classes: "bg-green-100 text-green-800 border-green-200" },
-  annulee:           { label: "Annulée",                            classes: "bg-red-100 text-red-800 border-red-200" },
+  en_attente:      { label: "En attente d'approbation", classes: "bg-orange-100 text-orange-800 border-orange-200" },
+  validee_dept:    { label: "Approuvée",                classes: "bg-blue-100 text-blue-800 border-blue-200" },
+  validee_station: { label: "Ravitaillement effectué",  classes: "bg-purple-100 text-purple-800 border-purple-200" },
+  validee_cellule: { label: "Validée",                  classes: "bg-green-100 text-green-800 border-green-200" },
+  annulee:         { label: "Annulée",                  classes: "bg-red-100 text-red-800 border-red-200" },
 };
 
 const DV_STATUT: Record<string, { label: string; classes: string }> = {
@@ -249,19 +248,9 @@ export default function DetailDemandePage() {
   const [signErrorBons,         setSignErrorBons]         = useState<string | null>(null);
   const [circuitSuccess,        setCircuitSuccess]        = useState<string | null>(null);
   const [isLoadingSignatures,   setIsLoadingSignatures]   = useState(true);
-  // États pour l'édition des montants (chef_dept sur soumise_assistant)
-  const [editingMontants,       setEditingMontants]       = useState(false);
-  const [montantEdits,          setMontantEdits]          = useState<Record<string, string>>({});
-  const [savingMontants,        setSavingMontants]        = useState(false);
-  // États pour le retour cellule (avec commentaire)
-  const [showRetourForm,        setShowRetourForm]        = useState(false);
-  const [retourComment,         setRetourComment]         = useState("");
-  const [retourning,            setRetourning]            = useState(false);
-  const [signingCelluleAssistant, setSigningCelluleAssistant] = useState(false);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
-  const isAssistant     = user?.role === "assistant";
   const isStation       = user?.role === "responsable_station";
   const isStationViewer = user?.role === "responsable_station_viewer";
   const isCellule       = user?.role === "Admin" || user?.role === "MENAGER";
@@ -445,202 +434,6 @@ export default function DetailDemandePage() {
       setSubmitError(e instanceof Error ? e.message : "Erreur lors du retour.");
     } finally {
       setProcessing(null);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Chef_dept signe la situation de l'assistant
-  // -------------------------------------------------------------------------
-
-  async function handleSignerSituationAssistant() {
-    if (!demande) return;
-    if (!window.confirm("Valider et signer la situation ? Les montants seront enregistrés.")) return;
-    setProcessing("signer_assistant");
-    setSubmitError(null);
-    try {
-      // Valider tous les véhicules (statut = valide) + insérer dans ravitaillements_vehicules
-      await Promise.all(
-        (demande.demande_vehicules ?? []).map(async (dv) => {
-          const { error: updateErr } = await supabase
-            .from("demande_vehicules")
-            .update({ statut: "valide" })
-            .eq("id", dv.id);
-          if (updateErr) throw updateErr;
-
-          const { error: insertErr } = await supabase
-            .from("ravitaillements_vehicules")
-            .insert({
-              vehicule_id:        dv.vehicule_id,
-              montant_ravitaille: dv.montant ?? 0,
-              n_liter:            0,
-              kilometrage:        0,
-              date:               new Date().toISOString().split("T")[0],
-              commentaire:        "Situation assistant validée par le chef de département",
-            });
-          if (insertErr) throw insertErr;
-        })
-      );
-
-      // Passer le statut à validee_station + soumettre le circuit
-      const { error: demandeErr } = await supabase
-        .from("demandes_ravitaillement")
-        .update({ statut: "validee_station", situation_soumise: true })
-        .eq("id", demande.id);
-      if (demandeErr) throw demandeErr;
-
-      // Enregistrer la signature circuit (étape 1) du signataire courant
-      if (userCircuitRole) {
-        try {
-          await signerSituation(demande.id, userCircuitRole, 1, demande.departement);
-        } catch {
-          // La signature peut échouer si pas de signature enregistrée — on continue quand même
-        }
-      }
-
-      // Notifier la cellule
-      void Promise.all([
-        notifyByRole("Admin",   `Situation ${demande.departement} prête pour validation par la cellule.`, "soumission_station", id),
-        notifyByRole("MENAGER", `Situation ${demande.departement} prête pour validation par la cellule.`, "soumission_station", id),
-      ]);
-
-      await fetchSignaturesSituation(demande.id);
-      await fetchDemande();
-    } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la signature.");
-    } finally {
-      setProcessing(null);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Chef_dept sauvegarde les montants modifiés
-  // -------------------------------------------------------------------------
-
-  async function handleSauvegarderMontants() {
-    if (!demande) return;
-    setSavingMontants(true);
-    setSubmitError(null);
-    console.log('handleSauvegarderMontants appelé');
-    console.log('demande id:', demande.id);
-    console.log('montants modifiés:', montantEdits);
-    try {
-      await Promise.all(
-        Object.entries(montantEdits).map(async ([dvId, montantStr]) => {
-          const montant = parseFloat(montantStr);
-          console.log(`UPDATE demande_vehicules id=${dvId} montant=${montant}`);
-          if (isNaN(montant) || montant < 0) {
-            console.warn(`montant invalide pour dvId=${dvId}, ignoré`);
-            return;
-          }
-          const { data, error } = await supabase
-            .from("demande_vehicules")
-            .update({ montant })
-            .eq("id", dvId)
-            .select("id, montant");
-          console.log(`résultat UPDATE dvId=${dvId}:`, JSON.stringify({ data, error }));
-          if (error) throw error;
-        })
-      );
-      setEditingMontants(false);
-      setMontantEdits({});
-      await fetchDemande();
-    } catch (e: unknown) {
-      console.error('erreur sauvegarde montants:', e);
-      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la sauvegarde.");
-    } finally {
-      setSavingMontants(false);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Cellule signe directement la situation assistant (soumise_assistant)
-  // -------------------------------------------------------------------------
-
-  async function handleCelluleSignerAssistant() {
-    if (!demande) return;
-    if (!window.confirm("Valider et soumettre la situation pour le circuit de signatures ?")) return;
-    setSigningCelluleAssistant(true);
-    setSubmitError(null);
-    try {
-      await Promise.all(
-        (demande.demande_vehicules ?? []).map(async (dv) => {
-          const { error: updateErr } = await supabase
-            .from("demande_vehicules")
-            .update({ statut: "valide" })
-            .eq("id", dv.id);
-          if (updateErr) throw updateErr;
-
-          const { error: insertErr } = await supabase
-            .from("ravitaillements_vehicules")
-            .insert({
-              vehicule_id:        dv.vehicule_id,
-              montant_ravitaille: dv.montant ?? 0,
-              n_liter:            0,
-              kilometrage:        0,
-              date:               new Date().toISOString().split("T")[0],
-              commentaire:        "Situation assistant validée directement par la Cellule CSÉ",
-            });
-          if (insertErr) throw insertErr;
-        })
-      );
-
-      const { error: demandeErr } = await supabase
-        .from("demandes_ravitaillement")
-        .update({ statut: "validee_station", situation_soumise: true })
-        .eq("id", demande.id);
-      if (demandeErr) throw demandeErr;
-
-      const count = (demande.demande_vehicules ?? []).length;
-      const emailMsg = `La situation des dépenses carburant est prête pour votre signature. ${count} véhicule(s) validé(s).`;
-      void notifyByRole("signataire", emailMsg, "signature_requise", id);
-
-      await fetchDemande();
-    } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : "Erreur lors de la signature.");
-    } finally {
-      setSigningCelluleAssistant(false);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Cellule retourne la situation assistant avec commentaire
-  // -------------------------------------------------------------------------
-
-  async function handleRetournerSituationCellule() {
-    if (!demande || !retourComment.trim()) return;
-    setRetourning(true);
-    setSubmitError(null);
-    try {
-      // Remettre les véhicules en_attente
-      const { error: dvErr } = await supabase
-        .from("demande_vehicules")
-        .update({ statut: "en_attente" })
-        .eq("demande_id", demande.id);
-      if (dvErr) throw dvErr;
-
-      // Remettre le statut à soumise_assistant
-      const { error: demandeErr } = await supabase
-        .from("demandes_ravitaillement")
-        .update({ statut: "soumise_assistant" })
-        .eq("id", demande.id);
-      if (demandeErr) throw demandeErr;
-
-      // Notifier le chef du département
-      void notifyByRoleAndDept(
-        "chef_departement",
-        demande.departement,
-        `La situation a été retournée par la Cellule CSÉ. Commentaire : ${retourComment.trim()}`,
-        "retour_station",
-        id
-      );
-
-      setShowRetourForm(false);
-      setRetourComment("");
-      await fetchDemande();
-    } catch (e: unknown) {
-      setSubmitError(e instanceof Error ? e.message : "Erreur lors du retour.");
-    } finally {
-      setRetourning(false);
     }
   }
 
@@ -1236,10 +1029,6 @@ export default function DetailDemandePage() {
   }
 
   const statutCfg = STATUT_CONFIG[demande.statut];
-  // Situation créée par un assistant : aucun véhicule n'a de données litres/km
-  const isAssistantSituation =
-    (demande.demande_vehicules ?? []).length > 0 &&
-    (demande.demande_vehicules ?? []).every((dv) => dv.n_liter == null);
 
   // -------------------------------------------------------------------------
   // Render
@@ -1360,81 +1149,22 @@ export default function DetailDemandePage() {
           {/* cellule : soumettre la situation finale pour signature */}
           {isCellule &&
             (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") &&
-            signaturesSituation.length === 0 && (() => {
-              // Détection situation assistant : tous les véhicules ont montant mais pas n_liter
-              const isAssistantSit =
-                (demande.demande_vehicules ?? []).length > 0 &&
-                (demande.demande_vehicules ?? []).every((dv) => dv.n_liter == null);
-              if (isAssistantSit) {
-                return (
-                  <div className="w-full flex flex-col sm:flex-row flex-wrap gap-3">
-                    <button
-                      onClick={handleSoumettreSituation}
-                      disabled={processing === "soumettre_circuit"}
-                      className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow text-sm font-medium disabled:opacity-50"
-                    >
-                      {processing === "soumettre_circuit" ? "Envoi en cours…" : "Signer la situation"}
-                    </button>
-                    {showRetourForm ? (
-                      <div className="w-full flex flex-col gap-2">
-                        <textarea
-                          value={retourComment}
-                          onChange={(e) => setRetourComment(e.target.value)}
-                          placeholder="Saisir le commentaire de retour..."
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleRetournerSituationCellule}
-                            disabled={retourning || !retourComment.trim()}
-                            className="flex-1 min-h-[44px] px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-50"
-                          >
-                            {retourning ? "Retour en cours…" : "Confirmer le retour"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setShowRetourForm(false); setRetourComment(""); }}
-                            className="min-h-[44px] px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setShowRetourForm(true)}
-                        className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-amber-300 text-amber-700 rounded-xl hover:bg-amber-50 transition-colors text-sm font-medium"
-                      >
-                        Retourner avec commentaire
-                      </button>
-                    )}
-                    {circuitSuccess && (
-                      <p className="w-full text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
-                        {circuitSuccess}
-                      </p>
-                    )}
-                  </div>
-                );
-              }
-              return (
-                <div className="w-full flex flex-col gap-2">
-                  <button
-                    onClick={handleSoumettreSituation}
-                    disabled={processing === "soumettre_circuit"}
-                    className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow text-sm font-medium disabled:opacity-50"
-                  >
-                    {processing === "soumettre_circuit" ? "Envoi en cours…" : "Soumettre la situation finale"}
-                  </button>
-                  {circuitSuccess && (
-                    <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
-                      {circuitSuccess}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
+            signaturesSituation.length === 0 && (
+            <div className="w-full flex flex-col gap-2">
+              <button
+                onClick={handleSoumettreSituation}
+                disabled={processing === "soumettre_circuit"}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all shadow text-sm font-medium disabled:opacity-50"
+              >
+                {processing === "soumettre_circuit" ? "Envoi en cours…" : "Soumettre la situation finale"}
+              </button>
+              {circuitSuccess && (
+                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5">
+                  {circuitSuccess}
+                </p>
+              )}
+            </div>
+          )}
 
           {(isCircuitActor || isChefDeCours) && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
             signaturesSituation.some((s) => s.role === "directeur_general") ? (
@@ -1480,9 +1210,7 @@ export default function DetailDemandePage() {
       )}
 
       {/* Vehicles list — pour non-acteurs du circuit, pour cellule (actions), DG et directeur_commercial (lecture seule) */}
-      {(!isCircuitActor || isCellule || isDG || isDirecteurCommercial) &&
-       !(isCellule && demande.statut === "soumise_assistant") &&
-       !(isDirecteurCommercial && demande.statut === "soumise_assistant") && (
+      {(!isCircuitActor || isCellule || isDG || isDirecteurCommercial) && (
         <div className="space-y-4">
           {(demande.demande_vehicules ?? []).map((dv) => (
             <VehiculeCard
@@ -1511,189 +1239,8 @@ export default function DetailDemandePage() {
         </div>
       )}
 
-      {/* Situation assistant — aperçu professionnel pour chef_dept et directeur_commercial */}
-      {(isChefDept || isDirecteurCommercial) && demande.statut === "soumise_assistant" && (() => {
-        const items = demande.demande_vehicules ?? [];
-        const totalMontant = editingMontants
-          ? items.reduce((s, dv) => s + (parseFloat(montantEdits[dv.id] ?? "0") || 0), 0)
-          : items.reduce((s, dv) => s + (dv.montant ?? 0), 0);
-        const today   = new Date().toLocaleDateString("fr-FR");
-        const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
-        const isDC    = demande.departement === "DC";
-        const sigBlocks = isDC
-          ? [
-              { label: "Directeur Commercial",  role: "directeur_commercial" },
-              { label: "Chef Cellule CSÉ",       role: "chef_cellule" },
-              { label: "Directeur Général",      role: "directeur_general" },
-              { label: "Directrice Financière",  role: "directrice_financiere" },
-            ]
-          : [
-              { label: "Chef Département",       role: "chef_departement" },
-              { label: "Directeur Technique",    role: "directeur_technique" },
-              { label: "Chef Cellule CSÉ",       role: "chef_cellule" },
-              { label: "Directeur Général",      role: "directeur_general" },
-              { label: "Directrice Financière",  role: "directrice_financiere" },
-            ];
-        return (
-          <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Aperçu de la situation</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Vérifiez les montants avant de signer</p>
-            </div>
-
-            <div className="px-6 py-5 space-y-5">
-              {/* En-tête document */}
-              <div className="flex items-center gap-4">
-                <img src="/LOGO.webp" alt="Logo RIMATEL" className="w-14 h-14 object-contain flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="font-bold text-sm text-gray-900">Direction Technique</p>
-                  <p className="text-sm text-gray-600">{demande.departement}</p>
-                </div>
-                <div className="text-sm text-gray-700 text-right whitespace-nowrap flex-shrink-0">
-                  <p>Date de saisie : {dateStr}</p>
-                  <p className="text-xs text-gray-400">Aujourd'hui : {today}</p>
-                </div>
-              </div>
-
-              <p className="text-center text-sm font-bold uppercase tracking-widest text-gray-900">
-                Situation des dépenses carburant
-              </p>
-
-              {/* Tableau */}
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-800 text-white">
-                      <th className="px-3 py-2 text-center border border-gray-600 w-8">N°</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Description</th>
-                      <th className="px-3 py-2 text-right border border-gray-600 w-36">Montant (MRU)</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Responsable</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Zone</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((dv, index) => {
-                      const v = vehiculesMap[dv.vehicule_id];
-                      return (
-                        <tr key={dv.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-3 py-2 border border-gray-200 text-center">{index + 1}</td>
-                          <td className="px-3 py-2 border border-gray-200">
-                            <span className="font-medium">{v?.vehicule || "—"}</span>
-                            {v?.matricule && <span className="block text-gray-500">{v.matricule}</span>}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200 text-right">
-                            {editingMontants ? (
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={montantEdits[dv.id] ?? ""}
-                                onChange={(e) => setMontantEdits((prev) => ({ ...prev, [dv.id]: e.target.value }))}
-                                className="w-full text-right border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
-                              />
-                            ) : (
-                              <span className="font-medium">{formatNumber(dv.montant ?? 0)}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.chauffeur_responsable || "—"}</td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.zone || "—"}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="bg-gray-100 font-bold">
-                      <td className="px-3 py-2 border border-gray-200 text-right" colSpan={2}>Total</td>
-                      <td className="px-3 py-2 border border-gray-200 text-right">{formatNumber(totalMontant)}</td>
-                      <td className="px-3 py-2 border border-gray-200" colSpan={2} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Blocs de signature (vides) */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                  Circuit de signatures
-                </p>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
-                  {sigBlocks.map((block) => {
-                    const sig = signaturesSituation.find((s) => s.role === block.role);
-                    return (
-                      <div key={block.label} style={{ flex: 1 }} className="text-center border border-dashed border-gray-300 rounded-xl p-3">
-                        <p className="text-xs font-semibold text-gray-500 leading-tight mb-2">{block.label}</p>
-                        <div className="h-10 flex items-end justify-center mb-1">
-                          {sig?.signature_url
-                            ? <img src={sig.signature_url} alt={block.label} className="max-h-10 max-w-full object-contain" />
-                            : null}
-                        </div>
-                        <div className="border-b border-gray-400 mx-2" />
-                        <p className="text-xs text-gray-400 mt-1">{sig ? "Signé" : "Signature"}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Boutons d'action */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100">
-                {editingMontants ? (
-                  <>
-                    <button
-                      onClick={handleSauvegarderMontants}
-                      disabled={savingMontants}
-                      className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-                    >
-                      {savingMontants ? "Sauvegarde…" : "Valider les modifications"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setEditingMontants(false); setMontantEdits({}); }}
-                      className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium"
-                    >
-                      Annuler modification
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={handleSignerSituationAssistant}
-                      disabled={processing === "signer_assistant"}
-                      className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-                    >
-                      {processing === "signer_assistant" ? "Signature en cours…" : "Signer la situation"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const edits: Record<string, string> = {};
-                        items.forEach((dv) => { edits[dv.id] = dv.montant != null ? String(dv.montant) : ""; });
-                        setMontantEdits(edits);
-                        setEditingMontants(true);
-                      }}
-                      className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-white border border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      Modifier les montants
-                    </button>
-                    <button
-                      onClick={handleAnnuler}
-                      disabled={processing === "annuler"}
-                      className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50"
-                    >
-                      {processing === "annuler" ? "Annulation…" : "Annuler la demande"}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Placeholder pour chef_dept / signataires non-DG en attente de validation (hors situation assistant) */}
+      {/* Placeholder pour chef_dept / signataires non-DG en attente de validation */}
       {(isChefDept || (isSignataire && !isDG)) &&
-        demande.statut !== "soumise_assistant" &&
         !(demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
         <div className="bg-white rounded-2xl shadow border border-gray-200 p-8 text-center text-gray-400 text-sm">
           Les aperçus seront disponibles après validation des ravitaillements par la cellule.
@@ -1702,7 +1249,6 @@ export default function DetailDemandePage() {
 
       {/* Aperçus situation + bons — pour tous les acteurs du circuit + chef_de_cours (lecture seule) */}
       {(isCircuitActor || isChefDeCours) &&
-       demande.statut !== "soumise_assistant" &&
        (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
         <>
           <SituationApercu
@@ -1716,176 +1262,19 @@ export default function DetailDemandePage() {
             circuit={demande.departement === "DC" ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION}
             isLoadingSignatures={isLoadingSignatures}
           />
-          {!isAssistantSituation && (
-            <BonsApercu
-              demande={demande}
-              vehiculesMap={vehiculesMap}
-              signatures={signaturesBons}
-              userCircuitRole={userCircuitRole}
-              isSigning={signingForBons}
-              signError={signErrorBons}
-              onSigner={handleSignerBons}
-              circuit={demande.departement === "DC" ? CIRCUIT_BONS_DC : CIRCUIT_BONS}
-              isLoadingSignatures={isLoadingSignatures}
-            />
-          )}
+          <BonsApercu
+            demande={demande}
+            vehiculesMap={vehiculesMap}
+            signatures={signaturesBons}
+            userCircuitRole={userCircuitRole}
+            isSigning={signingForBons}
+            signError={signErrorBons}
+            onSigner={handleSignerBons}
+            circuit={demande.departement === "DC" ? CIRCUIT_BONS_DC : CIRCUIT_BONS}
+            isLoadingSignatures={isLoadingSignatures}
+          />
         </>
       )}
-
-      {/* Situation assistant — tableau lecture seule pour l'assistant */}
-      {isAssistant && demande.statut === "soumise_assistant" && (() => {
-        const items = demande.demande_vehicules ?? [];
-        const total = items.reduce((s, dv) => s + (dv.montant ?? 0), 0);
-        return (
-          <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Situation soumise</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Récapitulatif des montants saisis</p>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-800 text-white">
-                      <th className="px-3 py-2 text-center border border-gray-600 w-8">N°</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Description</th>
-                      <th className="px-3 py-2 text-right border border-gray-600 w-36">Montant (MRU)</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Responsable</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Zone</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((dv, index) => {
-                      const v = vehiculesMap[dv.vehicule_id];
-                      return (
-                        <tr key={dv.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-3 py-2 border border-gray-200 text-center">{index + 1}</td>
-                          <td className="px-3 py-2 border border-gray-200">
-                            <span className="font-medium">{v?.vehicule || "—"}</span>
-                            {v?.matricule && <span className="block text-gray-500">{v.matricule}</span>}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200 text-right font-medium">
-                            {formatNumber(dv.montant ?? 0)}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.chauffeur_responsable || "—"}</td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.zone || "—"}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="bg-gray-100 font-bold">
-                      <td className="px-3 py-2 border border-gray-200 text-right" colSpan={2}>Total</td>
-                      <td className="px-3 py-2 border border-gray-200 text-right">{formatNumber(total)}</td>
-                      <td className="px-3 py-2 border border-gray-200" colSpan={2} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
-                Situation soumise au Chef de Département — en attente de signature
-              </p>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Situation assistant — tableau + actions pour la cellule (Admin/MENAGER) */}
-      {isCellule && demande.statut === "soumise_assistant" && (() => {
-        const items = demande.demande_vehicules ?? [];
-        const total = items.reduce((s, dv) => s + (dv.montant ?? 0), 0);
-        return (
-          <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Situation en attente</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Créée par l'assistant — en attente de signature chef de département</p>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-800 text-white">
-                      <th className="px-3 py-2 text-center border border-gray-600 w-8">N°</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Description</th>
-                      <th className="px-3 py-2 text-right border border-gray-600 w-36">Montant (MRU)</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Responsable</th>
-                      <th className="px-3 py-2 text-left border border-gray-600">Zone</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((dv, index) => {
-                      const v = vehiculesMap[dv.vehicule_id];
-                      return (
-                        <tr key={dv.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-3 py-2 border border-gray-200 text-center">{index + 1}</td>
-                          <td className="px-3 py-2 border border-gray-200">
-                            <span className="font-medium">{v?.vehicule || "—"}</span>
-                            {v?.matricule && <span className="block text-gray-500">{v.matricule}</span>}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200 text-right font-medium">
-                            {formatNumber(dv.montant ?? 0)}
-                          </td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.chauffeur_responsable || "—"}</td>
-                          <td className="px-3 py-2 border border-gray-200">{v?.zone || "—"}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="bg-gray-100 font-bold">
-                      <td className="px-3 py-2 border border-gray-200 text-right" colSpan={2}>Total</td>
-                      <td className="px-3 py-2 border border-gray-200 text-right">{formatNumber(total)}</td>
-                      <td className="px-3 py-2 border border-gray-200" colSpan={2} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Boutons cellule */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100">
-                <button
-                  onClick={handleCelluleSignerAssistant}
-                  disabled={signingCelluleAssistant}
-                  className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-                >
-                  {signingCelluleAssistant ? "Validation en cours…" : "Signer la situation"}
-                </button>
-                {showRetourForm ? (
-                  <div className="flex-1 flex flex-col gap-2">
-                    <textarea
-                      value={retourComment}
-                      onChange={(e) => setRetourComment(e.target.value)}
-                      placeholder="Saisir le commentaire de retour..."
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleRetournerSituationCellule}
-                        disabled={retourning || !retourComment.trim()}
-                        className="flex-1 min-h-[44px] px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-colors text-sm font-medium disabled:opacity-50"
-                      >
-                        {retourning ? "Retour en cours…" : "Confirmer le retour"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowRetourForm(false); setRetourComment(""); }}
-                        className="min-h-[44px] px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium"
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowRetourForm(true)}
-                    className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 bg-white border border-amber-300 text-amber-700 rounded-xl hover:bg-amber-50 transition-colors text-sm font-medium"
-                  >
-                    Retourner avec commentaire
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Circuit de signatures — uniquement pour les non-acteurs hors chef_de_cours (ex: station) */}
       {!isCircuitActor && !isChefDeCours && (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (

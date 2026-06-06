@@ -23,22 +23,17 @@ export default function NouvelleDemandePage() {
   const { allVehicules, loading: vLoading } = useVehicules();
 
   const isChefDept  = user?.role === "chef_departement";
-  const isAssistant = user?.role === "assistant";
-  // chef_de_cours avec département assigné (ex: Hassen/DC) → même logique que chef_departement
-  const hasDeptLock = isChefDept || isAssistant || (user?.role === "chef_de_cours" && !!user?.departement);
+  const hasDeptLock = isChefDept || (user?.role === "chef_de_cours" && !!user?.departement);
 
   // État du sélecteur uniquement pour chef_de_cours
   const [departement, setDepartement] = useState<Departement>("Zone A");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [matriculeSearch, setMatriculeSearch] = useState("");
-  // Montants par véhicule (uniquement pour l'assistant)
-  const [montants, setMontants] = useState<Record<number, string>>({});
-  const [step, setStep] = useState<"selection" | "montants">("selection");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && user.role !== "chef_de_cours" && user.role !== "chef_departement" && user.role !== "assistant") {
+    if (user && user.role !== "chef_de_cours" && user.role !== "chef_departement") {
       navigate("/demandes", { replace: true });
     }
   }, [user, navigate]);
@@ -47,8 +42,6 @@ export default function NouvelleDemandePage() {
   useEffect(() => {
     setSelected(new Set());
     setMatriculeSearch("");
-    setMontants({});
-    setStep("selection");
   }, [departement]);
 
   const vehiculesDept = useMemo(
@@ -57,8 +50,7 @@ export default function NouvelleDemandePage() {
         if (hasDeptLock) {
           if (!user?.departement) return false;
           if (normalizeZone(v.zone) !== normalizeZone(user.departement)) return false;
-          // L'assistant voit TOUS les véhicules du département (pas seulement NKTT)
-          if (!isAssistant && v.centre?.trim().toUpperCase() !== "NKTT") return false;
+          if (v.centre?.trim().toUpperCase() !== "NKTT") return false;
           return true;
         }
         const zoneMatch =
@@ -69,7 +61,7 @@ export default function NouvelleDemandePage() {
         if (user?.role === "chef_de_cours" && v.centre?.trim().toUpperCase() !== "NKTT") return false;
         return true;
       }),
-    [allVehicules, departement, hasDeptLock, isAssistant, user?.departement]
+    [allVehicules, departement, hasDeptLock, user?.departement]
   );
 
   const vehiculesFiltres = useMemo(
@@ -111,37 +103,17 @@ export default function NouvelleDemandePage() {
     }
   }
 
-  function handleGoToMontants(e: React.FormEvent) {
-    e.preventDefault();
-    if (selected.size === 0) {
-      setError("Sélectionnez au moins un véhicule.");
-      return;
-    }
-    setError(null);
-    setStep("montants");
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (selected.size === 0) {
       setError("Sélectionnez au moins un véhicule.");
       return;
     }
-    if (isAssistant) {
-      const missing = [...selected].some((id) => !montants[id] || parseFloat(montants[id]) <= 0);
-      if (missing) {
-        setError("Veuillez saisir un montant valide pour chaque véhicule sélectionné.");
-        return;
-      }
-    }
     setError(null);
     setSubmitting(true);
     try {
       const deptToSubmit = hasDeptLock ? (user?.departement ?? "") : departement;
-      const montantsMap = isAssistant
-        ? Object.fromEntries([...selected].map((id) => [id, parseFloat(montants[id] ?? "0")]))
-        : undefined;
-      await createDemande(deptToSubmit, [...selected], user?.role, montantsMap);
+      await createDemande(deptToSubmit, [...selected], user?.role);
       navigate("/demandes");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur lors de la création.");
@@ -186,80 +158,6 @@ export default function NouvelleDemandePage() {
     );
   }
 
-  // Étape montants pour l'assistant
-  if (isAssistant && step === "montants") {
-    const selectedVehicules = vehiculesDept.filter((v) => selected.has(v.id));
-    return (
-      <div className="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0 pb-28 sm:pb-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setStep("selection")}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
-            aria-label="Retour"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Saisie des montants</h1>
-            <p className="text-sm text-gray-500">Renseignez le montant pour chaque véhicule sélectionné.</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {selectedVehicules.map((v) => (
-            <div key={v.id} className="bg-white rounded-2xl shadow border border-gray-200 p-5">
-              <div className="mb-3">
-                <p className="font-semibold text-gray-900">{v.vehicule}</p>
-                <p className="text-xs text-gray-500">{v.matricule}{v.chauffeurResponsable ? ` · ${v.chauffeurResponsable}` : ""}</p>
-              </div>
-              <label className="block">
-                <span className="text-sm font-medium text-gray-700">Montant (MRU) *</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  required
-                  value={montants[v.id] ?? ""}
-                  onChange={(e) => setMontants((prev) => ({ ...prev, [v.id]: e.target.value }))}
-                  className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent"
-                  placeholder="0"
-                />
-              </label>
-            </div>
-          ))}
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-              {error}
-            </p>
-          )}
-
-          <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-4 sm:static sm:bg-transparent sm:border-0 sm:p-0 sm:backdrop-blur-none">
-            <div className="max-w-2xl mx-auto flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("selection")}
-                className="flex-1 text-center px-5 py-3 min-h-[44px] flex items-center justify-center border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm"
-              >
-                Retour
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 px-5 py-3 min-h-[44px] bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? "Envoi en cours..." : `Envoyer la situation (${selected.size} véhicule(s))`}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto py-4 sm:py-6 px-4 sm:px-0 pb-28 sm:pb-6 space-y-6">
       {/* Header */}
@@ -274,18 +172,12 @@ export default function NouvelleDemandePage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isAssistant ? "Nouvelle situation" : "Nouvelle demande"}
-          </h1>
-          <p className="text-sm text-gray-500">
-            {isAssistant
-              ? "Sélectionnez les véhicules pour saisir les montants."
-              : "Sélectionnez un département et les véhicules concernés."}
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Nouvelle demande</h1>
+          <p className="text-sm text-gray-500">Sélectionnez un département et les véhicules concernés.</p>
         </div>
       </div>
 
-      <form onSubmit={isAssistant ? handleGoToMontants : handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Département : badge si verrou (chef_departement ou chef_de_cours avec dept assigné), sélecteur sinon */}
         {hasDeptLock ? (
           <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 flex items-center gap-3">
@@ -419,11 +311,9 @@ export default function NouvelleDemandePage() {
               disabled={submitting || selected.size === 0}
               className="flex-1 px-5 py-3 min-h-[44px] bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all shadow font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isAssistant
-                ? `Saisir les montants${selected.size > 0 ? ` (${selected.size})` : ""}`
-                : submitting
-                  ? "Envoi en cours..."
-                  : `Envoyer la demande${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              {submitting
+                ? "Envoi en cours..."
+                : `Envoyer la demande${selected.size > 0 ? ` (${selected.size})` : ""}`}
             </button>
           </div>
         </div>

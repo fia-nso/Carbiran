@@ -142,20 +142,15 @@ export function useDemandes() {
   // -------------------------------------------------------------------------
 
   const createDemande = useCallback(
-    async (departement: string, vehiculeIds: number[], role?: string, montants?: Record<number, number>) => {
+    async (departement: string, vehiculeIds: number[], role?: string) => {
       const { data: session } = await supabase.auth.getUser();
       const userId = session.user?.id;
       if (!userId) throw new Error("Utilisateur non connecté.");
 
-      const isChefDept  = role === "chef_departement";
-      const isAssistant = role === "assistant";
-      const isDC        = role === "chef_de_cours" && departement === "DC";
+      const isChefDept = role === "chef_departement";
+      const isDC       = role === "chef_de_cours" && departement === "DC";
 
-      const statutInitial = isChefDept
-        ? "validee_dept"
-        : isAssistant
-        ? "soumise_assistant"
-        : "en_attente";
+      const statutInitial = isChefDept ? "validee_dept" : "en_attente";
 
       const { data: demande, error: demandeErr } = await supabase
         .from("demandes_ravitaillement")
@@ -169,9 +164,6 @@ export function useDemandes() {
         demande_id: demande.id,
         vehicule_id,
         statut: "en_attente",
-        ...(isAssistant && montants?.[vehicule_id] != null
-          ? { montant: montants[vehicule_id] }
-          : {}),
       }));
 
       const { error: dvErr } = await supabase
@@ -186,15 +178,6 @@ export function useDemandes() {
           ["responsable_station", "responsable_station_viewer"],
           `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`,
           "validation_dept",
-          demande.id
-        );
-      } else if (isAssistant) {
-        // Situation assistant — notifier le chef du département
-        void notifyByRoleAndDept(
-          "chef_departement",
-          departement,
-          `Nouvelle situation créée par votre assistant — en attente de votre signature`,
-          "nouvelle_demande",
           demande.id
         );
       } else if (isDC) {
