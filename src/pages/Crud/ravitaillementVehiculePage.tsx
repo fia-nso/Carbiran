@@ -524,9 +524,9 @@ export default function RavitaillementVehiculePage() {
 
     const signaturesHtml = isDC
       ? `<div class="sig-block"><p class="sig-title">Directeur Commercial</p><div class="sig-line"></div></div>
+         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Chef Cellule CSÉ</p><div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>
-         <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>`
+         <div class="sig-block"><p class="sig-title">Directeur Général</p><div class="sig-line"></div></div>`
       : `<div class="sig-block"><p class="sig-title">Chef Département</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directeur Technique</p><div class="sig-line"></div></div>
          <div class="sig-block"><p class="sig-title">Directrice Financière</p><div class="sig-line"></div></div>
