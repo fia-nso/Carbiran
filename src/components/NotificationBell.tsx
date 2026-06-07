@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/supabaseClient";
+import { useAuthContext } from "@/context/AuthProvider";
 import type { Notification } from "@/types";
 
 const MAX_DISPLAYED = 20;
@@ -8,6 +9,9 @@ const MAX_DISPLAYED = 20;
 export default function NotificationBell() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<any>(null);
+  const { user } = useAuthContext();
+  const userId = user?.id;
 
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -32,9 +36,29 @@ export default function NotificationBell() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    const id = setInterval(() => { void load(); }, 30_000);
-    return () => clearInterval(id);
-  }, [load]);
+    if (!userId || channelRef.current) return;
+
+    const uid = Math.random().toString(36).slice(2, 8);
+    channelRef.current = supabase
+      .channel('notif-' + userId + '-' + uid)
+      .on('postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: 'user_id=eq.' + userId,
+        },
+        () => { void load(); }
+      )
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [userId, load]);
 
   // Close on click outside
   useEffect(() => {
