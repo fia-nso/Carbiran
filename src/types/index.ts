@@ -11,6 +11,7 @@ export type AppRole =
 export interface User {
   id: string;
   email: string | null;
+  notification_email?: string | null;
   nom?: string | null;
   prenom?: string | null;
   role: AppRole;

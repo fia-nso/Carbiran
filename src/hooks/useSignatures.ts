@@ -226,7 +226,7 @@ export function useSignatures() {
           void sendSignatureEmail("medahab@rimatel.mr", "Directeur Général", demandeId, departement,
             "La situation et les bons DC sont prêts pour votre signature.");
         } else if (role === "directeur_general") {
-          void sendSignatureEmail("medahab@rimatel.mr", "Directrice Financière", demandeId, departement,
+          void sendSignatureEmail("mariiem.hadrami@rimatel.mr", "Directrice Financière", demandeId, departement,
             "La situation DC est prête pour votre signature finale.");
         }
       } else {
@@ -240,7 +240,7 @@ export function useSignatures() {
           void sendSignatureEmail("medahab@rimatel.mr", "Directeur Général", demandeId, departement,
             "La situation et les bons de carburant sont prêts pour votre signature.");
         } else if (role === "directeur_general") {
-          void sendSignatureEmail("medahab@rimatel.mr", "Directrice Financière", demandeId, departement,
+          void sendSignatureEmail("mariiem.hadrami@rimatel.mr", "Directrice Financière", demandeId, departement,
             "La situation des dépenses carburant est prête pour votre signature finale.");
         }
       }
