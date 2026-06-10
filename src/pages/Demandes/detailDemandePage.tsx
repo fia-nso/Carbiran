@@ -636,9 +636,10 @@ export default function DetailDemandePage() {
       } else {
         const fallbackEmail = CHEF_DEPT_EMAILS[demande.departement];
         const { data: chefProfile } = await supabase
-          .from("profiles").select("email")
+          .from("profiles").select("email, notification_email")
           .eq("role", "chef_departement").eq("departement", demande.departement).maybeSingle();
-        const chefEmail = (chefProfile as { email: string } | null)?.email || fallbackEmail;
+        const p = chefProfile as { email: string; notification_email?: string | null } | null;
+        const chefEmail = p?.notification_email || p?.email || fallbackEmail;
         if (chefEmail) {
           void sendSignatureEmail(chefEmail, "Chef Département", demande.id, demande.departement, emailMsg);
         }
