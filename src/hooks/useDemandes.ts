@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/supabaseClient";
 import { createNotification, notifyByRole, notifyByRoleAndDept, notifyByRoles } from "@/lib/notifications";
+import { sendSignatureEmail } from "@/lib/sendEmail";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -304,15 +305,26 @@ export function useDemandes() {
         .eq("demande_id", demandeId);
 
       if (dvs?.every((dv) => dv.statut === "ravitaille")) {
-        const { error: demandeErr } = await supabase
+        const { data: demandeData, error: demandeErr } = await supabase
           .from("demandes_ravitaillement")
           .update({ statut: "validee_station" })
-          .eq("id", demandeId);
+          .eq("id", demandeId)
+          .select("departement")
+          .single();
         if (demandeErr) throw demandeErr;
+
+        const departement = (demandeData as { departement: string } | null)?.departement ?? "";
 
         void Promise.all([
           notifyByRole("Admin",   "Tous les véhicules ravitaillés — demande prête pour validation", "soumission_station", demandeId),
           notifyByRole("MENAGER", "Tous les véhicules ravitaillés — demande prête pour validation", "soumission_station", demandeId),
+          sendSignatureEmail(
+            "ahmed.herma@rimatel.mr",
+            "Chef Cellule CSÉ",
+            demandeId,
+            departement,
+            "Tous les véhicules ont été ravitaillés. La situation est prête à être vérifiée et soumise."
+          ),
         ]);
       }
 

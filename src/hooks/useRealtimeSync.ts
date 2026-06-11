@@ -6,6 +6,7 @@ interface Options {
   onDvChange?: () => void;
   onRavitaillementChange?: () => void;
   onPhotosChange?: () => void;
+  showWebNotification?: (title: string, body: string, onClick?: () => void) => void;
 }
 
 export function useRealtimeSync(options: Options) {
@@ -21,9 +22,17 @@ export function useRealtimeSync(options: Options) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "demande_vehicules" },
-        () => {
+        (payload) => {
           optionsRef.current.onDemandesChange?.();
           optionsRef.current.onDvChange?.();
+          const newRow = payload.new as { statut?: string } | undefined;
+          if (newRow?.statut === "ravitaille") {
+            optionsRef.current.showWebNotification?.(
+              "🔔 Carbiran — Nouveau ravitaillement",
+              "Un véhicule a été ravitaillé — à vérifier",
+              () => window.focus()
+            );
+          }
         }
       )
       // demandes_ravitaillement → onDemandesChange

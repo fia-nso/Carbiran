@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { useWebNotifications } from "@/hooks/useWebNotifications";
 import type { DemandeRavitaillement, DemandeVehicule } from "@/types";
 
 
@@ -67,10 +68,16 @@ function DvDetailLine({ dvs }: { dvs: DemandeVehicule[] | undefined }) {
 export default function DemandesPage() {
   const { user } = useAuthContext();
   const { demandes, loading, error, fetchDemandes } = useDemandes();
+  const { showNotification } = useWebNotifications();
+  const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
 
   useEffect(() => { void fetchDemandes(); }, [fetchDemandes]);
 
-  useRealtimeSync({ onDemandesChange: fetchDemandes, onDvChange: fetchDemandes });
+  useRealtimeSync({
+    onDemandesChange: fetchDemandes,
+    onDvChange: fetchDemandes,
+    showWebNotification: isAdminOrManager ? showNotification : undefined,
+  });
 
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
 
