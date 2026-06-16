@@ -10,6 +10,7 @@ import ravitaillementsRoutes from './routes/ravitaillements';
 import signaturesRoutes    from './routes/signatures';
 import notificationsRoutes from './routes/notifications';
 import storageRoutes       from './routes/storage';
+import logsRoutes          from './routes/logs';
 
 const app = express();
 const PORT         = process.env.PORT         || 3000;
@@ -34,6 +35,7 @@ app.use('/api/ravitaillements', ravitaillementsRoutes);
 app.use('/api/signatures',      signaturesRoutes);
 app.use('/api/notifications',   notificationsRoutes);
 app.use('/api/storage',         storageRoutes);
+app.use('/api/logs',            logsRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 

@@ -84,6 +84,65 @@ function canChangeStatut(
   return false;
 }
 
+// ─── GET /api/bons/:dvId — public, vérification QR code ─────────────────────
+
+router.get('/bons/:dvId', async (req, res) => {
+  try {
+    const { rows: [dv] } = await pool.query(
+      `SELECT
+         dv.id, dv.demande_id, dv.montant, dv.n_liter, dv.statut,
+         v.matricule, v.vehicule AS type_vehicule, v.chauffeur_responsable,
+         d.departement, d.created_at AS demande_date,
+         (
+           SELECT json_agg(json_build_object('id', dv2.id, 'zone', v2.zone) ORDER BY v2.zone)
+           FROM demande_vehicules dv2
+           JOIN vehicules v2 ON v2.id = dv2.vehicule_id
+           WHERE dv2.demande_id = dv.demande_id AND dv2.statut = 'valide'
+         ) AS bons_sorted
+       FROM demande_vehicules dv
+       JOIN vehicules v ON v.id = dv.vehicule_id
+       JOIN demandes_ravitaillement d ON d.id = dv.demande_id
+       WHERE dv.id = $1`,
+      [req.params.dvId]
+    );
+
+    if (!dv) { res.status(404).json({ error: 'Bon introuvable' }); return; }
+
+    const sorted = (dv.bons_sorted ?? []) as { id: string; zone: string }[];
+    const idx    = sorted.findIndex((b) => b.id === req.params.dvId);
+
+    // Signatures circuit bons avec URLs fraîches
+    const { rows: sigRows } = await pool.query(
+      `SELECT ss.role, ss.signe_le, su.signature_url
+       FROM signatures_situation ss
+       JOIN signatures_utilisateurs su ON su.user_id = ss.user_id
+       WHERE ss.demande_id = $1 AND ss.circuit = 'bons'
+       ORDER BY ss.ordre`,
+      [dv.demande_id]
+    );
+
+    res.json({
+      id:           dv.id,
+      demande_id:   dv.demande_id,
+      montant:      dv.montant ?? 0,
+      n_liter:      dv.n_liter ?? 0,
+      statut:       dv.statut,
+      matricule:    dv.matricule ?? '—',
+      typeVehicule: dv.type_vehicule ?? '—',
+      chauffeur:    dv.chauffeur_responsable ?? '—',
+      departement:  dv.departement ?? '—',
+      date:         dv.demande_date
+        ? new Date(dv.demande_date).toLocaleDateString('fr-FR')
+        : '—',
+      bonNum:     idx >= 0 ? idx + 1 : 1,
+      signatures: sigRows,
+    });
+  } catch (err) {
+    console.error('[GET /demandes/bons/:dvId]', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // ─── GET /api/demandes ────────────────────────────────────────────────────────
 
 router.get('/', requireAuth, async (req, res) => {
