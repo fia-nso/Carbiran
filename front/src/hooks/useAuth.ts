@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiLogin, apiLogout, apiMe } from "@/lib/api";
 import api from "@/lib/api";
 import { writeActivityLogSafe } from "@/lib/activityLogs";
@@ -21,6 +22,7 @@ export default function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let mounted = true;
@@ -49,25 +51,20 @@ export default function useAuth(): UseAuthReturn {
     setError(null);
     setLoading(true);
     try {
-      const { token, user: userData } = await apiLogin(email, password);
-      localStorage.setItem(TOKEN_KEY, token);
-      setUser(userData);
-      await writeActivityLogSafe({
-        module: "auth",
-        action: "LOGIN",
-        targetTable: "profiles",
-        targetId: userData.id,
-        description: `Connexion de ${userData.email || userData.id}.`,
-        afterData: { id: userData.id, email: userData.email, role: userData.role },
-      });
+      const result = await apiLogin(email, password);
+
+      if (result?.token) {
+        localStorage.setItem(TOKEN_KEY, result.token);
+        setUser(result.user);
+        navigate('/demandes');
+      }
     } catch (err: any) {
-      console.error("login error:", err);
       setError(err?.response?.data?.error ?? err?.message ?? "Erreur de connexion");
       throw err;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
   const logout = useCallback(async () => {
     if (user) {
@@ -83,7 +80,8 @@ export default function useAuth(): UseAuthReturn {
     try { await apiLogout(); } catch { /* JWT stateless — on nettoie localement */ }
     localStorage.removeItem(TOKEN_KEY);
     setUser(null);
-  }, [user]);
+    navigate('/login');
+  }, [user, navigate]);
 
   const refreshUser = useCallback(async () => {
     try {

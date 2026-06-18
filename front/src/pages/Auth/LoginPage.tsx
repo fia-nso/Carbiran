@@ -76,8 +76,7 @@ const LoginPage: React.FC = () => {
     return () => setIsMounted(false);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     setError(null);
     setLoading(true);
 
@@ -90,7 +89,7 @@ const LoginPage: React.FC = () => {
     try {
       await login(username, password);
       if (isMounted) {
-        navigate("/", { replace: true });
+        navigate("/demandes", { replace: true });
       }
     } catch (err: any) {
       if (isMounted) {
@@ -123,7 +122,7 @@ const LoginPage: React.FC = () => {
 
         <form 
           className="bg-white/90 backdrop-blur-lg p-8 rounded-3xl shadow-2xl border border-white/50 ring-1 ring-green-100/50 space-y-6 transform transition-all duration-500 hover:shadow-3xl"
-          onSubmit={handleSubmit}
+          onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}
         >
           {error && (
             <div className="bg-gradient-to-r from-red-50 to-pink-50 text-red-700 border border-red-200 rounded-xl px-4 py-3 text-center font-medium text-sm shadow-lg animate-shake">

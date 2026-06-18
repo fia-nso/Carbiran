@@ -1,15 +1,10 @@
 import { Request, Response } from 'express'
-import {
-  findSignaturesByDemandeId,
-  findLatestSignatureUrls,
-  findSignatureUtilisateur,
-  findUserSignatureUrl,
-  createSignature,
-  upsertSignatureUtilisateur,
-} from '../models/Signature'
-import { notifyByRoles } from '../lib/notifications'
+import { SignatureService } from '../services/signatureService'
+import { notifyByRoles } from '../services/notificationService'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'
+
+const signatureService = new SignatureService()
 
 const CIRCUITS: Record<string, Record<string, string[]>> = {
   situation: {
@@ -25,19 +20,7 @@ const CIRCUITS: Record<string, Record<string, string[]>> = {
 export const getSignatures = async (req: Request, res: Response): Promise<void> => {
   const demandeId = req.params['demandeId'] as string
   try {
-    const { rows } = await findSignaturesByDemandeId(demandeId)
-
-    if (rows.length > 0) {
-      const userIds = [...new Set(rows.map((r: any) => r.user_id as string))]
-      const { rows: latest } = await findLatestSignatureUrls(userIds)
-      const latestMap: Record<string, string> = {}
-      for (const l of latest) latestMap[l.user_id] = l.signature_url
-      for (const r of rows) {
-        if (latestMap[r.user_id]) r.signature_url = latestMap[r.user_id]
-      }
-    }
-
-    res.json(rows)
+    res.json(await signatureService.findByDemandeId(demandeId))
   } catch (err) {
     console.error('[GET /signatures/:demandeId]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -46,8 +29,7 @@ export const getSignatures = async (req: Request, res: Response): Promise<void> 
 
 export const getSignatureUtilisateur = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { rows } = await findSignatureUtilisateur(req.user!.sub)
-    res.json(rows[0] ?? null)
+    res.json((await signatureService.findUtilisateurByUserId(req.user!.sub)) ?? null)
   } catch (err) {
     console.error('[GET /signatures/utilisateur/me]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -64,29 +46,25 @@ export const postSignature = async (req: Request, res: Response): Promise<void> 
   }
 
   if (!demande_id || !role || ordre == null) {
-    res.status(400).json({ error: 'Champs requis: demande_id, role, ordre' })
-    return
+    res.status(400).json({ error: 'Champs requis: demande_id, role, ordre' }); return
   }
 
   try {
-    const { rows: sigRows } = await findUserSignatureUrl(req.user!.sub)
-
-    if (!sigRows[0]?.signature_url) {
-      res.status(400).json({ error: "Vous devez d'abord enregistrer votre signature." })
-      return
+    const signatureUrl = await signatureService.findUserSignatureUrl(req.user!.sub)
+    if (!signatureUrl) {
+      res.status(400).json({ error: "Vous devez d'abord enregistrer votre signature." }); return
     }
 
-    const { rows } = await createSignature(
-      demande_id, role, req.user!.sub, sigRows[0].signature_url, ordre, circuit
-    )
+    const sig = await signatureService.createSignature({
+      demande_id, role, user_id: req.user!.sub, signature_url: signatureUrl, ordre, circuit,
+    })
 
     void notifyNextSigner(demande_id, ordre, circuit, departement)
 
-    res.status(201).json(rows[0])
+    res.status(201).json(sig)
   } catch (err: any) {
-    if (err.code === '23505') {
-      res.status(409).json({ error: 'Vous avez déjà signé ce document pour ce circuit' })
-      return
+    if (err.code === 'ER_DUP_ENTRY') {
+      res.status(409).json({ error: 'Vous avez déjà signé ce document pour ce circuit' }); return
     }
     console.error('[POST /signatures]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -94,21 +72,18 @@ export const postSignature = async (req: Request, res: Response): Promise<void> 
 }
 
 export const uploadSignatureHandler = async (req: Request, res: Response): Promise<void> => {
-  if (!req.file) {
-    res.status(400).json({ error: 'Fichier de signature requis' })
-    return
-  }
+  if (!req.file) { res.status(400).json({ error: 'Fichier de signature requis' }); return }
 
   const { circuit_role } = req.body as { circuit_role?: string }
   const url = `${BASE_URL}/uploads/signatures/${req.file.filename}`
 
   try {
-    const { rows } = await upsertSignatureUtilisateur(
+    const su = await signatureService.upsertSignatureUtilisateur(
       req.user!.sub,
       circuit_role ?? req.user!.role,
       url
     )
-    res.status(201).json(rows[0])
+    res.status(201).json(su)
   } catch (err) {
     console.error('[POST /signatures/upload]', err)
     res.status(500).json({ error: 'Erreur serveur' })

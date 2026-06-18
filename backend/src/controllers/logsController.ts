@@ -1,10 +1,11 @@
 import { Request, Response } from 'express'
-import { findAllLogs, createLog } from '../models/ActivityLog'
+import { LogService } from '../services/logService'
+
+const logService = new LogService()
 
 export const getLogs = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { rows } = await findAllLogs()
-    res.json(rows)
+    res.json(await logService.findAll())
   } catch (err) {
     console.error('[GET /logs]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -18,14 +19,13 @@ export const createLogHandler = async (req: Request, res: Response): Promise<voi
   } = req.body as Record<string, unknown>
 
   try {
-    const { rows } = await createLog(
-      req.user!.sub,
-      req.user!.email,
-      module, action,
-      target_table, target_id,
-      description, before_data, after_data, metadata
-    )
-    res.status(201).json(rows[0])
+    const log = await logService.create({
+      user_id: req.user!.sub,
+      user_email: req.user!.email,
+      module, action, target_table, target_id,
+      description, before_data, after_data, metadata,
+    })
+    res.status(201).json(log)
   } catch (err) {
     console.error('[POST /logs]', err)
     res.status(500).json({ error: 'Erreur serveur' })

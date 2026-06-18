@@ -7,12 +7,24 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
-// Intercepteur — ajoute le token automatiquement
+// Intercepteur requête — ajoute le token automatiquement
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('carbiran_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
+
+// Intercepteur réponse — token expiré ou invalide → /login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+      localStorage.removeItem('carbiran_token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
 
 // Auth
 export const apiLogin = (email: string, password: string) =>

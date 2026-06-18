@@ -10,8 +10,8 @@ import { useAuthContext } from "../context/AuthProvider";
 const ProtectedRoute: React.FC = () => {
   const { user, loading } = useAuthContext();
   const location = useLocation();
+  const token = localStorage.getItem('carbiran_token');
 
-  // pendant le chargement initial, on peut afficher un loader minimal
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -20,7 +20,7 @@ const ProtectedRoute: React.FC = () => {
     );
   }
 
-  if (!user) {
+  if (!user && !token) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
