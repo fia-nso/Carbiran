@@ -8,8 +8,8 @@ export class User {
   @Column({ type: 'varchar', unique: true })
   email!: string
 
-  @Column({ type: 'varchar' })
-  password_hash!: string
+  @Column({ type: 'varchar', nullable: true })
+  password_hash!: string | null
 
   @Column({ type: 'varchar', default: 'viewer' })
   role!: string

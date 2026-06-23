@@ -15,10 +15,19 @@ export class AuthService {
     console.log('user trouvé:', user ? 'oui' : 'non')
     if (user) {
       console.log('password_hash:', user.password_hash)
+      if (!user.password_hash) {
+        throw new Error('Mot de passe non configuré')
+      }
       const valid = await bcrypt.compare(password, user.password_hash)
       console.log('mot de passe valide:', valid)
     }
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    if (!user) {
+      throw Object.assign(new Error('Identifiants incorrects'), { status: 401 })
+    }
+    if (!user.password_hash) {
+      throw new Error('Mot de passe non configuré')
+    }
+    if (!(await bcrypt.compare(password, user.password_hash))) {
       throw Object.assign(new Error('Identifiants incorrects'), { status: 401 })
     }
 
@@ -95,7 +104,13 @@ export class AuthService {
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await repo().findOne({ where: { id: userId }, select: { id: true, password_hash: true } })
-    if (!user || !(await bcrypt.compare(currentPassword, user.password_hash))) {
+    if (!user) {
+      throw Object.assign(new Error('Mot de passe actuel incorrect'), { status: 401 })
+    }
+    if (!user.password_hash) {
+      throw new Error('Mot de passe non configuré')
+    }
+    if (!(await bcrypt.compare(currentPassword, user.password_hash))) {
       throw Object.assign(new Error('Mot de passe actuel incorrect'), { status: 401 })
     }
     const hash = await bcrypt.hash(newPassword, 10)
