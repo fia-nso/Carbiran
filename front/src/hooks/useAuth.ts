@@ -56,7 +56,9 @@ export default function useAuth(): UseAuthReturn {
       if (result?.token) {
         localStorage.setItem(TOKEN_KEY, result.token);
         setUser(result.user);
-        navigate('/demandes');
+        console.log('user.role dans state:', result.user?.role);
+        console.log('typeof role:', typeof result.user?.role);
+        window.location.href = '/demandes';
       }
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err?.message ?? "Erreur de connexion");

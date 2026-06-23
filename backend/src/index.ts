@@ -20,7 +20,15 @@ const PORT         = process.env.PORT         || 3000
 const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
 const CORS_ORIGIN  = process.env.CORS_ORIGIN  || 'http://localhost:5173'
 
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }))
+const corsOptions = {
+  origin: CORS_ORIGIN,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
+app.use(cors(corsOptions))
+app.options('/*splat', cors(corsOptions))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use('/uploads', express.static(path.resolve(STORAGE_PATH)))

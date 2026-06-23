@@ -177,21 +177,21 @@ export default function DemandesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredDemandes.map((d) => (
-                    <tr key={d.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-gray-900">{d.departement}</td>
+                  {filteredDemandes.map((demande) => (
+                    <tr key={demande.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">{demande.departement}</td>
                       <td className="px-6 py-4 text-gray-600 text-sm">
-                        {new Date(d.created_at).toLocaleDateString("fr-FR")}
+                        {new Date(demande.created_at).toLocaleDateString("fr-FR")}
                       </td>
                       <td className="px-6 py-4">
-                        <SmartStatutBadge d={d} />
+                        <SmartStatutBadge d={demande} />
                       </td>
                       <td className="px-6 py-4">
-                        <DvDetailLine dvs={d.demande_vehicules} />
+                        <DvDetailLine dvs={demande.demande_vehicules} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link
-                          to={`/demandes/${d.id}`}
+                          to={`/demandes/${demande.id}`}
                           className="text-sm font-medium text-teal-700 hover:text-teal-900"
                         >
                           Voir →
@@ -205,22 +205,22 @@ export default function DemandesPage() {
 
             {/* Mobile cards */}
             <div className="md:hidden divide-y divide-gray-100">
-              {filteredDemandes.map((d) => (
+              {filteredDemandes.map((demande) => (
                 <Link
-                  key={d.id}
-                  to={`/demandes/${d.id}`}
+                  key={demande.id}
+                  to={`/demandes/${demande.id}`}
                   className="flex items-start justify-between gap-3 p-4 hover:bg-gray-50 transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold text-gray-900">{d.departement}</p>
+                    <p className="font-semibold text-gray-900">{demande.departement}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {new Date(d.created_at).toLocaleDateString("fr-FR")}
+                      {new Date(demande.created_at).toLocaleDateString("fr-FR")}
                       {" · "}
-                      {d.demande_vehicules?.length ?? 0} véhicule(s)
+                      {demande.demande_vehicules?.length ?? 0} véhicule(s)
                     </p>
-                    <DvDetailLine dvs={d.demande_vehicules} />
+                    <DvDetailLine dvs={demande.demande_vehicules} />
                   </div>
-                  <SmartStatutBadge d={d} />
+                  <SmartStatutBadge d={demande} />
                 </Link>
               ))}
             </div>

@@ -18,7 +18,8 @@ function applyAccessFilter(
   qb: SelectQueryBuilder<Demande>,
   role: AppRole,
   userId: string,
-  departement: string | null
+  departement: string | null,
+  circuitRole: string | null = null
 ): void {
   switch (role) {
     case 'Admin':
@@ -26,20 +27,24 @@ function applyAccessFilter(
       break
     case 'chef_departement':
       if (!departement) {
-        qb.where('1 = 0')
+        qb.andWhere('1 = 0')
       } else {
-        qb.where('d.departement = :dept', { dept: departement })
+        qb.andWhere('d.departement = :dept', { dept: departement })
       }
       break
     case 'responsable_station':
     case 'responsable_station_viewer':
-      qb.where("d.statut IN ('validee_dept', 'validee_station', 'validee_cellule')")
+      qb.andWhere("d.statut IN ('validee_dept', 'validee_station', 'validee_cellule')")
       break
     case 'signataire':
-      qb.where("d.statut = 'validee_cellule'")
+      if (circuitRole === 'directeur_commercial') {
+        qb.andWhere('d.departement = :dept', { dept: 'DC' })
+      } else {
+        qb.andWhere("d.statut = 'validee_cellule'")
+      }
       break
     default:
-      qb.where('d.created_by = :userId', { userId })
+      qb.andWhere('d.created_by = :userId', { userId })
   }
 }
 
@@ -79,14 +84,14 @@ function canChangeStatut(
 }
 
 export class DemandeService {
-  async findAll(role: AppRole, userId: string, departement: string | null) {
+  async findAll(role: AppRole, userId: string, departement: string | null, circuitRole: string | null = null) {
     const qb = demandeRepo()
       .createQueryBuilder('d')
       .leftJoinAndSelect('d.creator', 'u')
       .leftJoinAndSelect('d.demande_vehicules', 'dv')
       .orderBy('d.created_at', 'DESC')
 
-    applyAccessFilter(qb, role, userId, departement)
+    applyAccessFilter(qb, role, userId, departement, circuitRole)
     const rows = await qb.getMany()
 
     return rows.map((d) => ({
@@ -103,13 +108,14 @@ export class DemandeService {
     }))
   }
 
-  async findById(id: string, role: AppRole, userId: string, departement: string | null) {
+  async findById(id: string, role: AppRole, userId: string, departement: string | null, circuitRole: string | null = null) {
+    console.log('findDemandeById id reçu:', id)
     const qb = demandeRepo()
       .createQueryBuilder('d')
       .leftJoinAndSelect('d.creator', 'u')
       .where('d.id = :id', { id })
 
-    applyAccessFilter(qb, role, userId, departement)
+    applyAccessFilter(qb, role, userId, departement, circuitRole)
 
     const demande = await qb.getOne()
     if (!demande) return null
@@ -264,13 +270,16 @@ export class DemandeService {
       Object.assign(dv, fields)
       const saved = await em.save(DemandeVehicule, dv)
 
+      console.log('Vérification promotion validee_station...')
       if (fields.statut === 'ravitaille') {
         const allDvs = await em.find(DemandeVehicule, { where: { demande_id: demandeId } })
+        console.log(`Statuts véhicules : [${allDvs.map((d) => d.statut).join(', ')}]`)
         if (allDvs.every((d) => d.statut === 'ravitaille')) {
           const demande = await em.findOne(Demande, { where: { id: demandeId } })
           if (demande && ['validee_dept', 'en_attente'].includes(demande.statut)) {
             demande.statut = 'validee_station'
             await em.save(Demande, demande)
+            console.log('Demande promue à validee_station !')
             return { dv: saved, promoted: true, promotedDepartement: demande.departement }
           }
         }

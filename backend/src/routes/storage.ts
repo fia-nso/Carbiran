@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from '../middleware/auth'
 import { uploadPhoto } from '../middleware/upload'
 import {
   uploadPhotoHandler,
+  deletePhotosByDvHandler,
   deleteStorageHandler,
 } from '../controllers/storageController'
 
@@ -14,6 +15,13 @@ router.post(
   requireRole('Admin', 'MENAGER', 'responsable_station'),
   uploadPhoto.single('photo'),
   uploadPhotoHandler
+)
+
+router.delete(
+  '/photo',
+  requireAuth,
+  requireRole('Admin', 'MENAGER', 'responsable_station'),
+  deletePhotosByDvHandler
 )
 
 router.delete(

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { SignatureService } from '../services/signatureService'
-import { notifyByRoles } from '../services/notificationService'
+import { notifyByRoles, createNotification } from '../services/notificationService'
+import { AppDataSource } from '../config/database'
+import { User } from '../entities/User'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'
 
@@ -103,8 +105,18 @@ async function notifyNextSigner(
   if (!nextRole) return
 
   const label = circuit === 'bons' ? 'bons de carburant' : 'situation des dépenses'
-  const msg = `Votre signature est requise pour les ${label} (étape ${currentOrdre + 1} : ${nextRole})`
+  const msg = `Votre signature est requise pour les ${label} — département ${departement} (étape ${currentOrdre + 1})`
 
-  const appRoles = nextRole === 'chef_cellule' ? ['Admin', 'MENAGER'] : ['signataire']
-  await notifyByRoles(appRoles, msg, 'signature_requise', demandeId)
+  if (nextRole === 'chef_cellule') {
+    await notifyByRoles(['Admin', 'MENAGER'], msg, 'signature', demandeId, departement)
+  } else {
+    const userRepo = AppDataSource.getRepository(User)
+    const nextUser = await userRepo.findOne({
+      where: { circuit_role: nextRole },
+      select: { id: true },
+    })
+    if (nextUser) {
+      await createNotification(nextUser.id, msg, 'signature', demandeId, departement)
+    }
+  }
 }

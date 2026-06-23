@@ -23,9 +23,9 @@ export const getBon = async (req: Request, res: Response): Promise<void> => {
 }
 
 export const getDemandes = async (req: Request, res: Response): Promise<void> => {
-  const { role, sub, departement } = req.user!
+  const { role, sub, departement, circuit_role } = req.user!
   try {
-    res.json(await demandeService.findAll(role, sub, departement))
+    res.json(await demandeService.findAll(role, sub, departement, circuit_role))
   } catch (err) {
     console.error('[GET /demandes]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -34,9 +34,9 @@ export const getDemandes = async (req: Request, res: Response): Promise<void> =>
 
 export const getDemande = async (req: Request, res: Response): Promise<void> => {
   const id = req.params['id'] as string
-  const { role, sub, departement } = req.user!
+  const { role, sub, departement, circuit_role } = req.user!
   try {
-    const demande = await demandeService.findById(id, role, sub, departement)
+    const demande = await demandeService.findById(id, role, sub, departement, circuit_role)
     if (!demande) { res.status(404).json({ error: 'Demande introuvable ou accès refusé' }); return }
     res.json(demande)
   } catch (err) {

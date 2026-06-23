@@ -139,6 +139,9 @@ export const apiGetBon = (dvId: string) =>
   api.get(`/demandes/bons/${dvId}`).then(r => r.data)
 
 // Storage
+export const apiDeletePhotosForDv = (dvId: string, type: string) =>
+  api.delete('/storage/photo', { params: { dvId, type } })
+
 export const apiUploadPhoto = (file: File, demandeVehiculeId: string, type: string) => {
   const form = new FormData()
   form.append('photo', file)

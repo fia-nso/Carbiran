@@ -31,6 +31,19 @@ export const uploadPhotoHandler = async (req: Request, res: Response): Promise<v
   }
 }
 
+export const deletePhotosByDvHandler = async (req: Request, res: Response): Promise<void> => {
+  const { dvId, type } = req.query as { dvId?: string; type?: string }
+  if (!dvId || !type) { res.status(400).json({ error: 'dvId et type requis' }); return }
+  if (!VALID_TYPES.includes(type)) { res.status(400).json({ error: 'type invalide' }); return }
+  try {
+    await storageService.deletePhotosByDvAndType(dvId, type)
+    res.status(204).send()
+  } catch (err) {
+    console.error('[DELETE /storage/photo]', err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+}
+
 export const deleteStorageHandler = (_req: Request, res: Response): void => {
   const rawPath = _req.query['path'] as string | undefined
 

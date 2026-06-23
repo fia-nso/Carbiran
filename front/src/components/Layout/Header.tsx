@@ -34,6 +34,8 @@ export default function Header() {
 
   const isAdminOrManager = user?.role === "Admin" || user?.role === "MENAGER";
   const isAdmin          = user?.role === "Admin";
+  console.log('user dans Header:', user);
+  console.log('isAdminOrManager:', isAdminOrManager);
 
   const { requestPermission } = useWebNotifications();
   useEffect(() => { if (isAdminOrManager) void requestPermission(); }, []);
