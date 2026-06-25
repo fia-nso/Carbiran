@@ -51,6 +51,8 @@ export const postSignature = async (req: Request, res: Response): Promise<void> 
     res.status(400).json({ error: 'Champs requis: demande_id, role, ordre' }); return
   }
 
+  console.log('[postSignature] signature reçue pour role:', role, 'ordre:', ordre)
+
   try {
     const signatureUrl = await signatureService.findUserSignatureUrl(req.user!.sub)
     if (!signatureUrl) {
@@ -98,6 +100,7 @@ async function notifyNextSigner(
   circuit: string,
   departement: string
 ): Promise<void> {
+  console.log('[notifyNextSigner] appelé avec:', { demandeId, currentOrdre, circuit, departement })
   const circuitKey = departement === 'DC' ? 'DC' : 'default'
   const steps = CIRCUITS[circuit]?.[circuitKey] ?? []
   const nextRole = steps[currentOrdre]

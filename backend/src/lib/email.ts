@@ -10,6 +10,7 @@ export async function sendEmail(
   message: string
 ) {
   try {
+    console.log('[Email] Envoi vers:', to)
     await resend.emails.send({
       from: 'RIMATEL Carburant <carbiran@rimatel.mr>',
       to: [to],
@@ -38,6 +39,7 @@ export async function sendEmail(
         </div>
       `
     })
+    console.log('[Email] Envoyé avec succès')
   } catch (err) {
     console.error('[Email Error]', err)
   }

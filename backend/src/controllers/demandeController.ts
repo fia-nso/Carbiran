@@ -6,6 +6,8 @@ import {
   notifyByRoles,
   notifyByRoleAndDept,
 } from '../services/notificationService'
+import { AppDataSource } from '../config/database'
+import { User } from '../entities/User'
 import type { AppRole } from '../types/index'
 
 const demandeService = new DemandeService()
@@ -56,6 +58,8 @@ export const postDemande = async (req: Request, res: Response): Promise<void> =>
   const isChefDept = role === 'chef_departement'
   const statutInitial = isChefDept ? 'validee_dept' : 'en_attente'
 
+  console.log('[postDemande] nouvelle demande créée par role:', role)
+
   try {
     const demande = await demandeService.create(departement, vehicule_ids, sub, statutInitial)
     void triggerCreationNotifications(role, departement, vehicule_ids.length, demande.id, userDept)
@@ -84,6 +88,19 @@ export const patchDemande = async (req: Request, res: Response): Promise<void> =
 
     if (statut) {
       void triggerStatusNotifications(statut, id, current.departement, current.created_by)
+    }
+
+    if (situation_soumise) {
+      const msg = `La situation et les bons sont prêts pour signature — département ${current.departement}`
+      if (current.departement === 'DC') {
+        const dcUser = await AppDataSource.getRepository(User).findOne({
+          where: { circuit_role: 'directeur_commercial' },
+          select: { id: true },
+        })
+        if (dcUser) void createNotification(dcUser.id, msg, 'signature', id)
+      } else {
+        void notifyByRoleAndDept('chef_departement', current.departement, msg, 'signature', id)
+      }
     }
 
     res.json(updated)
@@ -169,6 +186,7 @@ async function triggerCreationNotifications(
   demandeId: string,
   _userDept: string | null
 ): Promise<void> {
+  console.log('[triggerCreation] appelé avec role:', role, 'departement:', departement)
   const isChefDept = role === 'chef_departement'
   const isDC = role === 'chef_de_cours' && departement === 'DC'
 
@@ -180,12 +198,11 @@ async function triggerCreationNotifications(
       demandeId
     )
   } else if (isDC) {
-    await notifyByRole(
-      'signataire',
-      'Nouvelle demande DC en attente de votre approbation',
-      'nouvelle_demande',
-      demandeId
-    )
+    const dcUser = await AppDataSource.getRepository(User).findOne({
+      where: { circuit_role: 'directeur_commercial' },
+      select: { id: true },
+    })
+    if (dcUser) await createNotification(dcUser.id, 'Nouvelle demande DC en attente de votre approbation', 'nouvelle_demande', demandeId)
   } else {
     await notifyByRoleAndDept(
       'chef_departement',
@@ -218,11 +235,19 @@ async function triggerStatusNotifications(
       await notifyByRole('MENAGER', `Demande ${departement} prête pour validation cellule`, 'soumission_station', demandeId)
       break
     case 'validee_cellule':
-      await notifyByRoleAndDept(
-        'chef_departement', departement,
-        `La demande ${departement} a été validée par la cellule.`,
-        'validation_cellule', demandeId
-      )
+      if (departement === 'DC') {
+        const dcUser = await AppDataSource.getRepository(User).findOne({
+          where: { circuit_role: 'directeur_commercial' },
+          select: { id: true },
+        })
+        if (dcUser) await createNotification(dcUser.id, `La demande DC a été validée par la cellule.`, 'validation_cellule', demandeId)
+      } else {
+        await notifyByRoleAndDept(
+          'chef_departement', departement,
+          `La demande ${departement} a été validée par la cellule.`,
+          'validation_cellule', demandeId
+        )
+      }
       await createNotification(createdBy, `Votre demande ${departement} a été validée.`, 'validation_cellule', demandeId)
       break
     case 'annulee':
