@@ -481,7 +481,7 @@ export default function UsersPage() {
                   disabled={resetSubmitting}
                   className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {resetSubmitting ? "Réinitialisation..." : "Réinitialiser"}
+                  {resetSubmitting ? "Enregistrement..." : "Enregistrer"}
                 </button>
               )}
             </div>
