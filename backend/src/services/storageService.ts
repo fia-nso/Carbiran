@@ -3,8 +3,7 @@ import fs from 'fs'
 import { AppDataSource } from '../config/database'
 import { Photo } from '../entities/Photo'
 import { normalizeStoredFilename } from '../lib/storageAssets'
-
-const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
+import { STORAGE_PATH } from '../config/storage'
 
 function repo() {
   return AppDataSource.getRepository(Photo)

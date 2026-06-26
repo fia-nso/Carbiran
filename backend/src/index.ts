@@ -5,6 +5,7 @@ import cors from 'cors'
 import path from 'path'
 
 import { AppDataSource } from './config/database'
+import { STORAGE_PATH } from './config/storage'
 
 import authRoutes           from './routes/auth'
 import demandesRoutes       from './routes/demandes'
@@ -17,7 +18,6 @@ import logsRoutes           from './routes/logs'
 
 const app = express()
 const PORT         = process.env.PORT         || 3000
-const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
 const CORS_ORIGIN  = process.env.CORS_ORIGIN  || 'http://localhost:5173'
 
 app.set('trust proxy', true)

@@ -1,10 +1,9 @@
 import { Request } from 'express'
 import fs from 'fs'
 import path from 'path'
+import { STORAGE_PATH } from '../config/storage'
 
 export type AssetFolder = 'photos' | 'signatures'
-
-const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
 
 const FALLBACK_PUBLIC_BASE_URL = (
   process.env.PUBLIC_BASE_URL || 'http://localhost:3000'

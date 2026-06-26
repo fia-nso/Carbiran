@@ -3,9 +3,9 @@ import path from 'path'
 import fs from 'fs'
 import { StorageService } from '../services/storageService'
 import { serializePhoto } from '../lib/storageAssets'
+import { STORAGE_PATH } from '../config/storage'
 
 const storageService = new StorageService()
-const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
 const VALID_TYPES = ['vehicule_avant', 'vehicule_apres', 'pompe']
 
 export const uploadPhotoHandler = async (req: Request, res: Response): Promise<void> => {

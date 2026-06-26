@@ -2,8 +2,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { Request } from 'express';
-
-const STORAGE_PATH = process.env.STORAGE_PATH || './uploads';
+import { STORAGE_PATH } from '../config/storage';
 
 function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
