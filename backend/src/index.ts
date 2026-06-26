@@ -20,15 +20,39 @@ const PORT         = process.env.PORT         || 3000
 const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
 const CORS_ORIGIN  = process.env.CORS_ORIGIN  || 'http://localhost:5173'
 
-const corsOptions = {
-  origin: CORS_ORIGIN,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}
+app.set('trust proxy', true)
 
-app.use(cors(corsOptions))
-app.options('/*splat', cors(corsOptions))
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://192.168.10.10:3200',
+  'https://carburan-rimatel.vercel.app'
+]
+const ALLOWED_CORS_ORIGINS = (
+  process.env.ALLOWED_ORIGINS
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean) || DEFAULT_CORS_ORIGINS
+)
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Autorise les clients sans header Origin (curl, health checks, appels serveur à serveur).
+    if (!origin) return callback(null, true)
+
+    if (ALLOWED_CORS_ORIGINS.includes(origin)) {
+      return callback(null, true)
+    }
+
+    return callback(new Error(`Origine CORS refusée: ${origin}`))
+  },
+  credentials: process.env.CORS_CREDENTIALS === 'true',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  optionsSuccessStatus: 200
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use('/uploads', express.static(path.resolve(STORAGE_PATH)))

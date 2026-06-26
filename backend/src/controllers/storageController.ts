@@ -2,10 +2,10 @@ import { Request, Response } from 'express'
 import path from 'path'
 import fs from 'fs'
 import { StorageService } from '../services/storageService'
+import { serializePhoto } from '../lib/storageAssets'
 
 const storageService = new StorageService()
 const STORAGE_PATH = process.env.STORAGE_PATH || './uploads'
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'
 const VALID_TYPES = ['vehicule_avant', 'vehicule_apres', 'pompe']
 
 export const uploadPhotoHandler = async (req: Request, res: Response): Promise<void> => {
@@ -17,11 +17,9 @@ export const uploadPhotoHandler = async (req: Request, res: Response): Promise<v
     res.status(400).json({ error: 'demande_vehicule_id et type (vehicule_avant | vehicule_apres | pompe) requis' }); return
   }
 
-  const url = `${BASE_URL}/uploads/photos/${req.file.filename}`
-
   try {
-    const photo = await storageService.createPhoto(demande_vehicule_id, url, type)
-    res.status(201).json(photo)
+    const photo = await storageService.createPhoto(demande_vehicule_id, req.file.filename, type)
+    res.status(201).json(serializePhoto(req, photo))
   } catch (err: any) {
     if (err.code === 'ER_NO_REFERENCED_ROW_2') {
       res.status(404).json({ error: 'demande_vehicule_id introuvable' }); return

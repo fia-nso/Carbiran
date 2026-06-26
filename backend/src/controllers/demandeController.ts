@@ -9,6 +9,7 @@ import {
 import { AppDataSource } from '../config/database'
 import { User } from '../entities/User'
 import type { AppRole } from '../types/index'
+import { serializeBonWithAssets, serializeDemandeWithAssets } from '../lib/storageAssets'
 
 const demandeService = new DemandeService()
 
@@ -17,7 +18,7 @@ export const getBon = async (req: Request, res: Response): Promise<void> => {
   try {
     const bon = await demandeService.getBon(dvId)
     if (!bon) { res.status(404).json({ error: 'Bon introuvable' }); return }
-    res.json(bon)
+    res.json(serializeBonWithAssets(req, bon))
   } catch (err) {
     console.error('[GET /demandes/bons/:dvId]', err)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -40,7 +41,7 @@ export const getDemande = async (req: Request, res: Response): Promise<void> => 
   try {
     const demande = await demandeService.findById(id, role, sub, departement, circuit_role)
     if (!demande) { res.status(404).json({ error: 'Demande introuvable ou accès refusé' }); return }
-    res.json(demande)
+    res.json(serializeDemandeWithAssets(req, demande))
   } catch (err) {
     console.error('[GET /demandes/:id]', err)
     res.status(500).json({ error: 'Erreur serveur' })
