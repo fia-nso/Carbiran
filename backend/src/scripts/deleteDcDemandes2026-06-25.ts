@@ -8,9 +8,10 @@ import { STORAGE_PATH } from '../config/storage'
 import { ActivityLog } from '../entities/ActivityLog'
 import { Demande } from '../entities/Demande'
 import { DemandeVehicule } from '../entities/DemandeVehicule'
+import { Notification } from '../entities/Notification'
 import { Photo } from '../entities/Photo'
 import { Signature } from '../entities/Signature'
-import { normalizeStoredFilename, resolveStoredSignatureFilename } from '../lib/storageAssets'
+import { normalizeStoredFilename } from '../lib/storageAssets'
 
 const TARGET_DEPARTEMENT = 'DC'
 const TARGET_DATE = '2026-06-25'
@@ -38,7 +39,6 @@ async function main() {
   const demandeVehiculeRepo = AppDataSource.getRepository(DemandeVehicule)
   const photoRepo = AppDataSource.getRepository(Photo)
   const signatureRepo = AppDataSource.getRepository(Signature)
-  const logRepo = AppDataSource.getRepository(ActivityLog)
 
   const demandes = await demandeRepo
     .createQueryBuilder('d')
@@ -79,18 +79,25 @@ async function main() {
       .filter((filename): filename is string => Boolean(filename))
   ))
 
-  const signatureFilenames = Array.from(new Set(
-    signatures
-      .map((signature) => resolveStoredSignatureFilename(signature))
-      .filter((filename): filename is string => Boolean(filename))
-  ))
-
   console.log(`Demandes trouvées: ${demandes.length}`)
   console.log(`Demandes véhicules liés: ${demandeVehicules.length}`)
   console.log(`Photos liées: ${photos.length}`)
   console.log(`Signatures liées: ${signatures.length}`)
 
   await AppDataSource.transaction(async (manager) => {
+    await manager.update(
+      Notification,
+      { demande_id: In(demandeIds) },
+      { demande_id: null }
+    )
+
+    await manager.delete(Signature, { demande_id: In(demandeIds) })
+
+    if (demandeVehiculeIds.length > 0) {
+      await manager.delete(Photo, { demande_vehicule_id: In(demandeVehiculeIds) })
+      await manager.delete(DemandeVehicule, { demande_id: In(demandeIds) })
+    }
+
     await manager.delete(Demande, { id: In(demandeIds) })
 
     await manager.save(ActivityLog, {
@@ -127,17 +134,11 @@ async function main() {
     }
   }
 
-  let deletedSignatureFiles = 0
-  for (const filename of signatureFilenames) {
-    if (deleteFileIfExists('signatures', filename)) {
-      deletedSignatureFiles += 1
-    }
-  }
-
+  const deletedSignatureFiles = 0
   console.log('Suppression terminée.')
   console.log(`Demandes supprimées: ${demandes.length}`)
   console.log(`Fichiers photo supprimés: ${deletedPhotoFiles}/${photoFilenames.length}`)
-  console.log(`Fichiers signature supprimés: ${deletedSignatureFiles}/${signatureFilenames.length}`)
+  console.log(`Fichiers signature supprimés: ${deletedSignatureFiles}/0`)
 
   await AppDataSource.destroy()
 }
