@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
+import type { Vehicule } from "@/types";
 
 const monthLabels = [
   "Janvier",
@@ -31,6 +33,13 @@ function extractMonthIndex(value: string | null | undefined) {
   return Number(match[2]) - 1;
 }
 
+function monthKeyOf(value: string | null | undefined) {
+  const year = extractYear(value);
+  const monthIndex = extractMonthIndex(value);
+  if (year === null || monthIndex === null) return null;
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+}
+
 function formatCount(value: number) {
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
 }
@@ -54,6 +63,13 @@ export default function DashboardPage() {
   const [filterZone, setFilterZone] = useState("");
   const [filterCentre, setFilterCentre] = useState("");
   const [filterMatricule, setFilterMatricule] = useState("");
+
+  // "Consommation par véhicule" — filtres véhicule + mois (indépendants du reste)
+  const [consoVehicule, setConsoVehicule] = useState<string>(""); // "" = tous, sinon id véhicule
+  // Multi-sélection de mois. [] = cumul total, 1 = ce mois, 2+ = comparaison en colonnes.
+  const [consoMonths, setConsoMonths] = useState<string[]>([]);
+  const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
 
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -190,6 +206,164 @@ export default function DashboardPage() {
   );
 
   const hasFilters = filterZone !== "" || filterCentre !== "" || filterMatricule !== "";
+
+  // -------------------------------------------------------------------------
+  // Consommation par véhicule (tous les ravitaillements enregistrés)
+  // -------------------------------------------------------------------------
+
+  // Liste des véhicules distincts présents dans les ravitaillements (pour le combobox).
+  const consoVehiculeList = useMemo<Vehicule[]>(() => {
+    const map = new Map<number, Vehicule>();
+    for (const item of ravitaillements) {
+      if (item.vehicule && !map.has(item.vehiculeId)) {
+        map.set(item.vehiculeId, item.vehicule);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.matricule.localeCompare(b.matricule));
+  }, [ravitaillements]);
+
+  // Liste des mois (YYYY-MM) où il existe au moins un ravitaillement, les plus récents d'abord.
+  const consoMonthOptions = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of ravitaillements) {
+      const year = extractYear(item.date);
+      const monthIndex = extractMonthIndex(item.date);
+      if (year !== null && monthIndex !== null) {
+        keys.add(`${year}-${String(monthIndex + 1).padStart(2, "0")}`);
+      }
+    }
+    return Array.from(keys)
+      .sort((a, b) => b.localeCompare(a))
+      .map((key) => {
+        const [year, month] = key.split("-");
+        return { key, label: `${monthLabels[Number(month) - 1]} ${year}` };
+      });
+  }, [ravitaillements]);
+
+  // Ferme le dropdown des mois au clic à l'extérieur.
+  useEffect(() => {
+    if (!monthDropdownOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(event.target as Node)) {
+        setMonthDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [monthDropdownOpen]);
+
+  const consoMonthLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const option of consoMonthOptions) map.set(option.key, option.label);
+    return map;
+  }, [consoMonthOptions]);
+
+  const labelOfMonth = (key: string) => consoMonthLabelMap.get(key) ?? key;
+
+  // Mois sélectionnés triés chronologiquement (ex: Juin avant Juillet) pour l'ordre des colonnes.
+  const selectedMonthsSorted = useMemo(
+    () => [...consoMonths].sort((a, b) => a.localeCompare(b)),
+    [consoMonths]
+  );
+
+  const isComparison = consoMonths.length >= 2;
+
+  function toggleConsoMonth(key: string) {
+    setConsoMonths((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
+
+  // Mode simple (0 ou 1 mois) : cumul total ou un seul mois.
+  const consoScoped = useMemo(
+    () =>
+      ravitaillements.filter((r) => {
+        if (consoVehicule !== "" && r.vehiculeId !== Number(consoVehicule)) return false;
+        if (consoMonths.length === 1 && monthKeyOf(r.date) !== consoMonths[0]) return false;
+        return true;
+      }),
+    [ravitaillements, consoVehicule, consoMonths]
+  );
+
+  // Mode comparaison (2 mois ou plus) : par véhicule, agrégats par mois côte à côte.
+  const comparison = useMemo(() => {
+    if (!isComparison) return null;
+    const monthSet = new Set(consoMonths);
+    const map = new Map<
+      number,
+      {
+        vehiculeId: number;
+        matricule: string;
+        nom: string;
+        byMonth: Record<string, { count: number; litres: number; montant: number }>;
+      }
+    >();
+    for (const item of ravitaillements) {
+      if (consoVehicule !== "" && item.vehiculeId !== Number(consoVehicule)) continue;
+      const key = monthKeyOf(item.date);
+      if (key === null || !monthSet.has(key)) continue;
+      let entry = map.get(item.vehiculeId);
+      if (!entry) {
+        entry = {
+          vehiculeId: item.vehiculeId,
+          matricule: item.vehicule?.matricule ?? `#${item.vehiculeId}`,
+          nom: item.vehicule?.vehicule ?? "—",
+          byMonth: {},
+        };
+        map.set(item.vehiculeId, entry);
+      }
+      const cell = entry.byMonth[key] ?? { count: 0, litres: 0, montant: 0 };
+      cell.count += 1;
+      cell.litres += item.nLiter;
+      cell.montant += item.montantRavitaille;
+      entry.byMonth[key] = cell;
+    }
+    const rows = Array.from(map.values()).sort((a, b) => a.matricule.localeCompare(b.matricule));
+    const totalsByMonth: Record<string, { count: number; litres: number; montant: number }> = {};
+    for (const key of consoMonths) totalsByMonth[key] = { count: 0, litres: 0, montant: 0 };
+    for (const row of rows) {
+      for (const key of consoMonths) {
+        const cell = row.byMonth[key];
+        if (!cell) continue;
+        totalsByMonth[key].count += cell.count;
+        totalsByMonth[key].litres += cell.litres;
+        totalsByMonth[key].montant += cell.montant;
+      }
+    }
+    return { rows, totalsByMonth };
+  }, [isComparison, consoMonths, consoVehicule, ravitaillements]);
+
+  const consoRows = useMemo(() => {
+    const map = new Map<
+      number,
+      { vehiculeId: number; matricule: string; nom: string; count: number; litres: number; montant: number }
+    >();
+    for (const item of consoScoped) {
+      const existing = map.get(item.vehiculeId);
+      if (existing) {
+        existing.count += 1;
+        existing.litres += item.nLiter;
+        existing.montant += item.montantRavitaille;
+      } else {
+        map.set(item.vehiculeId, {
+          vehiculeId: item.vehiculeId,
+          matricule: item.vehicule?.matricule ?? `#${item.vehiculeId}`,
+          nom: item.vehicule?.vehicule ?? "—",
+          count: 1,
+          litres: item.nLiter,
+          montant: item.montantRavitaille,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.matricule.localeCompare(b.matricule));
+  }, [consoScoped]);
+
+  const consoTotals = useMemo(
+    () =>
+      consoRows.reduce(
+        (acc, r) => ({ count: acc.count + r.count, litres: acc.litres + r.litres, montant: acc.montant + r.montant }),
+        { count: 0, litres: 0, montant: 0 }
+      ),
+    [consoRows]
+  );
 
   function handleRowClick(monthIndex: number) {
     if (selectedMonthIndex === monthIndex) {
@@ -498,6 +672,270 @@ export default function DashboardPage() {
             )}
           </div>
         )}
+
+        {/* Consommation par vehicule */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 sm:px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-green-600 to-teal-700 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Consommation par vehicule</h2>
+              <p className="text-green-100 text-sm mt-1">
+                {consoMonths.length === 0
+                  ? "Cumul de tous les ravitaillements enregistres."
+                  : consoMonths.length === 1
+                    ? `Ravitaillements de ${labelOfMonth(consoMonths[0])}.`
+                    : `Comparaison de ${consoMonths.length} mois cote a cote.`}
+              </p>
+              {consoMonths.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  {selectedMonthsSorted.map((key) => (
+                    <span
+                      key={key}
+                      className="inline-flex items-center gap-1 bg-white/20 text-white text-xs font-medium pl-2.5 pr-1 py-1 rounded-full"
+                    >
+                      {labelOfMonth(key)}
+                      <button
+                        type="button"
+                        onClick={() => toggleConsoMonth(key)}
+                        className="hover:bg-white/30 rounded-full p-0.5"
+                        aria-label={`Retirer ${labelOfMonth(key)}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setConsoMonths([])}
+                    className="text-white/80 hover:text-white text-xs underline"
+                  >
+                    Tout effacer
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+              <div className="w-full sm:w-72">
+                <label htmlFor="conso-vehicule" className="sr-only">Vehicule</label>
+                <SearchableVehiculeSelect
+                  vehicules={consoVehiculeList}
+                  value={consoVehicule}
+                  onChange={setConsoVehicule}
+                />
+                {consoVehicule === "" && (
+                  <p className="text-green-100 text-xs mt-1">Tous les vehicules</p>
+                )}
+              </div>
+              <div className="w-full sm:w-64" ref={monthDropdownRef}>
+                <span className="sr-only">Mois (selection multiple)</span>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMonthDropdownOpen((open) => !open)}
+                    aria-haspopup="listbox"
+                    aria-expanded={monthDropdownOpen}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-2.5 border border-white/40 rounded-xl bg-white/95 text-gray-800 focus:ring-2 focus:ring-white outline-none transition-all text-left"
+                  >
+                    <span className="truncate text-sm">
+                      {consoMonths.length === 0
+                        ? "Tous les mois (cumul)"
+                        : consoMonths.length === 1
+                          ? labelOfMonth(consoMonths[0])
+                          : `${consoMonths.length} mois selectionnes`}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 flex-shrink-0 text-gray-500 transition-transform ${monthDropdownOpen ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {monthDropdownOpen && (
+                    <div className="absolute right-0 z-20 mt-2 w-full max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl py-1">
+                      <button
+                        type="button"
+                        onClick={() => setConsoMonths([])}
+                        className={`w-full text-left px-4 py-2 text-sm border-b border-gray-100 hover:bg-green-50 ${
+                          consoMonths.length === 0 ? "text-green-700 font-semibold" : "text-gray-600"
+                        }`}
+                      >
+                        Tous les mois (cumul)
+                      </button>
+                      {consoMonthOptions.length === 0 ? (
+                        <p className="px-4 py-3 text-sm text-gray-400">Aucun mois disponible.</p>
+                      ) : (
+                        consoMonthOptions.map((m) => (
+                          <label
+                            key={m.key}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-green-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={consoMonths.includes(m.key)}
+                              onChange={() => toggleConsoMonth(m.key)}
+                              className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                            />
+                            <span>{m.label}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-green-100 text-xs mt-1">
+                  {consoMonths.length >= 2
+                    ? "Mode comparaison"
+                    : "Selectionnez un ou plusieurs mois"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tableau par vehicule */}
+          <div className="overflow-x-auto">
+            {isComparison && comparison ? (
+              /* Mode comparaison : un groupe de colonnes par mois */
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th
+                      rowSpan={2}
+                      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide align-bottom"
+                    >
+                      Matricule
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide align-bottom"
+                    >
+                      Vehicule
+                    </th>
+                    {selectedMonthsSorted.map((key) => (
+                      <th
+                        key={key}
+                        colSpan={3}
+                        className="px-4 py-2 text-center text-xs font-bold text-green-800 uppercase tracking-wide bg-green-50 border-l-2 border-green-200"
+                      >
+                        {labelOfMonth(key)}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {selectedMonthsSorted.map((key) => (
+                      <Fragment key={key}>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase bg-green-50/60 border-l-2 border-green-200">Nb</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase bg-green-50/60">Litres</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase bg-green-50/60">Montant</th>
+                      </Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={2 + selectedMonthsSorted.length * 3} className="px-6 py-12 text-center text-gray-500">Chargement...</td>
+                    </tr>
+                  ) : comparison.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={2 + selectedMonthsSorted.length * 3} className="px-6 py-12 text-center text-gray-400">Aucun ravitaillement pour les mois selectionnes.</td>
+                    </tr>
+                  ) : (
+                    comparison.rows.map((row) => (
+                      <tr key={row.vehiculeId} className="hover:bg-green-50/50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-900 text-sm">{row.matricule}</td>
+                        <td className="px-4 py-3 text-gray-700 text-sm">{row.nom}</td>
+                        {selectedMonthsSorted.map((key) => {
+                          const cell = row.byMonth[key];
+                          return (
+                            <Fragment key={key}>
+                              <td className="px-3 py-3 text-right text-gray-700 text-sm border-l-2 border-green-100">
+                                {cell ? formatCount(cell.count) : "—"}
+                              </td>
+                              <td className="px-3 py-3 text-right text-gray-700 text-sm">
+                                {cell ? formatMetric(cell.litres) : "—"}
+                              </td>
+                              <td className="px-3 py-3 text-right text-gray-700 text-sm">
+                                {cell ? formatAmount(cell.montant) : "—"}
+                              </td>
+                            </Fragment>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {comparison.rows.length > 0 && (
+                  <tfoot className="bg-amber-50 border-t-2 border-amber-200">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 font-bold text-gray-900 text-sm">
+                        Total ({comparison.rows.length} vehicule{comparison.rows.length > 1 ? "s" : ""})
+                      </td>
+                      {selectedMonthsSorted.map((key) => {
+                        const t = comparison.totalsByMonth[key];
+                        return (
+                          <Fragment key={key}>
+                            <td className="px-3 py-3 text-right font-bold text-blue-700 text-sm border-l-2 border-amber-200">{formatCount(t.count)}</td>
+                            <td className="px-3 py-3 text-right font-bold text-blue-700 text-sm">{formatMetric(t.litres)}</td>
+                            <td className="px-3 py-3 text-right font-bold text-blue-700 text-sm">{formatAmount(t.montant)}</td>
+                          </Fragment>
+                        );
+                      })}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            ) : (
+              /* Mode simple : cumul total (0 mois) ou un seul mois */
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Matricule</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Vehicule</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Nb ravit.</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Total litres</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Total montant</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">Chargement...</td>
+                    </tr>
+                  ) : consoRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-400">Aucun ravitaillement enregistre.</td>
+                    </tr>
+                  ) : (
+                    consoRows.map((row) => (
+                      <tr key={row.vehiculeId} className="hover:bg-green-50/50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-900 text-sm">{row.matricule}</td>
+                        <td className="px-4 py-3 text-gray-700 text-sm">{row.nom}</td>
+                        <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatCount(row.count)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatMetric(row.litres)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700 text-sm">{formatAmount(row.montant)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {consoRows.length > 0 && (
+                  <tfoot className="bg-amber-50 border-t-2 border-amber-200">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 font-bold text-gray-900 text-sm">
+                        Total ({consoRows.length} vehicule{consoRows.length > 1 ? "s" : ""})
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatCount(consoTotals.count)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatMetric(consoTotals.litres)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-blue-700 text-sm">{formatAmount(consoTotals.montant)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

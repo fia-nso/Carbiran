@@ -17,6 +17,7 @@ import {
 } from "@/hooks/useSignatures";
 import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
 import { uploadPhoto } from "@/lib/uploadPhoto";
+import { APP_URL } from "@/lib/env";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -253,10 +254,8 @@ export default function DetailDemandePage() {
       const mapped = mapRow(rawData);
       setDemande(mapped);
 
-      const sigsResult = await fetchSignaturesSituation(mapped.id);
+      await fetchSignaturesSituation(mapped.id);
       setIsLoadingSignatures(false);
-      console.log('signaturesSituation chargées:', sigsResult.situation);
-      console.log('signaturesBons chargées:', sigsResult.bons);
 
       // Vehicules map — inclus dans la réponse API
       const vMap: Record<number, VehiculeInfo> = {};
@@ -342,7 +341,6 @@ export default function DetailDemandePage() {
   }
 
   async function handleValiderDemandeCommercialClick() {
-    console.log('Approbation DC cliquée');
     if (!demande) return;
     setProcessing("valider_commercial");
     try {
@@ -354,7 +352,6 @@ export default function DetailDemandePage() {
   }
 
   async function handleAnnuler() {
-    console.log('Annulation DC cliquée');
     if (!demande) return;
     if (!window.confirm("Annuler cette demande ? Cette action est irréversible.")) return;
     setProcessing("annuler");
@@ -725,11 +722,6 @@ export default function DetailDemandePage() {
       .filter((u): u is string => !!u)
     await preloadImages(urlsBons)
 
-    console.log('signaturesBons:', signaturesBons);
-    console.log('sigImgHtml chef_departement:', sigImgHtml(signaturesBons, "chef_departement"));
-    console.log('sigImgHtml chef_cellule:', sigImgHtml(signaturesBons, "chef_cellule"));
-    console.log('sigImgHtml directeur_general:', sigImgHtml(signaturesBons, "directeur_general"));
-
     const logoUrl = `${window.location.origin}/LOGO.webp`;
     const dateStr = new Date(demande.created_at).toLocaleDateString("fr-FR");
     const dept    = demande.departement;
@@ -742,7 +734,7 @@ export default function DetailDemandePage() {
 
     const qrMap: Record<string, string> = {};
     for (const dv of sorted) {
-      const url = `https://carburan-rimatel.vercel.app/bon/${dv.id}`;
+      const url = `${APP_URL}/bon/${dv.id}`;
       qrMap[dv.id] = await QRCode.toDataURL(url, { width: 100 });
     }
 
@@ -1511,7 +1503,7 @@ function BonsApercu({
       const map: Record<string, string> = {};
       for (const dv of items) {
         map[dv.id] = await QRCode.toDataURL(
-          `https://carburan-rimatel.vercel.app/bon/${dv.id}`,
+          `${APP_URL}/bon/${dv.id}`,
           { width: 100 }
         );
       }
@@ -1529,12 +1521,6 @@ function BonsApercu({
     userCircuitRole !== null &&
     circuit.some((s) => s.role === userCircuitRole) &&
     prochainBons?.role === userCircuitRole;
-
-  console.log('canSignBons:', canSignBons);
-  console.log('signaturesBons:', signatures);
-  console.log('prochainBons:', prochainBons);
-  console.log('userCircuitRole:', userCircuitRole);
-  console.log('situation_soumise:', demande.situation_soumise);
 
   const bonSigBlocks = isDC
     ? [

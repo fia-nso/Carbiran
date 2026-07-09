@@ -8,6 +8,7 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useVehicules } from "@/hooks/useVehicule";
+import { APP_URL } from "@/lib/env";
 import type { RavitaillementVehicule } from "@/types";
 
 type RavitaillementDraft = {
@@ -647,7 +648,7 @@ export default function RavitaillementVehiculePage() {
 
     const qrMap: Record<number, string> = {};
     for (const item of sorted) {
-      const url = `https://carburan-rimatel.vercel.app/bon/${item.id}`;
+      const url = `${APP_URL}/bon/${item.id}`;
       qrMap[item.id] = await QRCode.toDataURL(url, { width: 100 });
     }
 

@@ -59,8 +59,6 @@ export const postDemande = async (req: Request, res: Response): Promise<void> =>
   const isChefDept = role === 'chef_departement'
   const statutInitial = isChefDept ? 'validee_dept' : 'en_attente'
 
-  console.log('[postDemande] nouvelle demande créée par role:', role)
-
   try {
     const demande = await demandeService.create(departement, vehicule_ids, sub, statutInitial)
     void triggerCreationNotifications(role, departement, vehicule_ids.length, demande.id, userDept)
@@ -187,7 +185,6 @@ async function triggerCreationNotifications(
   demandeId: string,
   _userDept: string | null
 ): Promise<void> {
-  console.log('[triggerCreation] appelé avec role:', role, 'departement:', departement)
   const isChefDept = role === 'chef_departement'
   const isDC = role === 'chef_de_cours' && departement === 'DC'
 

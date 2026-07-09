@@ -33,8 +33,30 @@ export function normalizeStoredFilename(value: string | null | undefined): strin
   }
 
   const normalized = pathname.replace(/\\/g, '/')
-  const segments = normalized.split('/').filter(Boolean)
+  const segments = normalized
+    .split('/')
+    .filter(Boolean)
+    // Garde anti-path-traversal : on ne laisse jamais passer "." ou ".."
+    .filter((segment) => segment !== '.' && segment !== '..')
+
+  if (segments.length === 0) return null
+
+  // Si la valeur est (ou contient) un chemin "/uploads/<folder>/...", on conserve
+  // TOUT ce qui suit le dossier d'asset. Cela préserve les sous-dossiers legacy
+  // comme "<user_id>/signature.png" au lieu de ne garder que "signature.png".
+  const uploadsIdx = segments.lastIndexOf('uploads')
+  if (uploadsIdx >= 0 && segments.length > uploadsIdx + 2) {
+    return segments.slice(uploadsIdx + 2).join('/')
+  }
+
+  // Sinon (nom de fichier « à plat » ou chemin déjà relatif), on garde le dernier segment.
   return segments[segments.length - 1] ?? null
+}
+
+// Encode chaque segment d'un chemin relatif séparément, pour ne PAS transformer
+// le "/" d'un sous-dossier (ex: "<user_id>/signature.png") en "%2F".
+function encodeAssetPath(relativePath: string): string {
+  return relativePath.split('/').map(encodeURIComponent).join('/')
 }
 
 export function resolveStoredSignatureFilename(signature: {
@@ -44,8 +66,11 @@ export function resolveStoredSignatureFilename(signature: {
   const filename = normalizeStoredFilename(signature.signature_url)
   if (!filename) return null
 
+  // Cas legacy : le nom générique "signature.<ext>" a été stocké SANS son
+  // sous-dossier "<user_id>/". Si l'on connaît le user_id, on le reconstruit
+  // (avec un "/", pour retrouver le vrai chemin sur disque : <user_id>/signature.<ext>).
   if (/^signature\.[a-z0-9]+$/i.test(filename) && signature.user_id) {
-    return `${signature.user_id}-${filename}`
+    return `${signature.user_id}/${filename}`
   }
 
   return filename
@@ -74,7 +99,7 @@ export function buildAssetUrl(
   const filename = normalizeStoredFilename(storedValue)
   if (!filename) return null
 
-  return `${buildPublicOrigin(req)}/uploads/${folder}/${encodeURIComponent(filename)}`
+  return `${buildPublicOrigin(req)}/uploads/${folder}/${encodeAssetPath(filename)}`
 }
 
 export function deleteStoredAssetFile(folder: AssetFolder, storedValue: string | null | undefined): void {
@@ -102,7 +127,7 @@ export function serializeSignatureLike<T extends { signature_url: string | null 
     ...signature,
     signature_url: (() => {
       const resolved = resolveStoredSignatureFilename(signature as T & { user_id?: string | null })
-      return resolved ? `${buildPublicOrigin(req)}/uploads/signatures/${encodeURIComponent(resolved)}` : null
+      return resolved ? `${buildPublicOrigin(req)}/uploads/signatures/${encodeAssetPath(resolved)}` : null
     })(),
   }
 }

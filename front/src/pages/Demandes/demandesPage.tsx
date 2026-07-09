@@ -4,7 +4,20 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useWebNotifications } from "@/hooks/useWebNotifications";
-import type { DemandeRavitaillement, DemandeVehicule } from "@/types";
+import {
+  getCircuitRole,
+  CIRCUIT_SITUATION,
+  CIRCUIT_BONS,
+  CIRCUIT_SITUATION_DC,
+  CIRCUIT_BONS_DC,
+} from "@/hooks/useSignatures";
+import type { CircuitStep } from "@/hooks/useSignatures";
+import type {
+  DemandeRavitaillement,
+  DemandeSignatureLite,
+  DemandeVehicule,
+  User,
+} from "@/types";
 
 
 const VEHICULE_STATUT_CARDS = [
@@ -63,6 +76,67 @@ function DvDetailLine({ dvs }: { dvs: DemandeVehicule[] | undefined }) {
   if (valide > 0)     parts.push(`✅ ${valide} validé${valide > 1 ? "s" : ""}`);
   if (parts.length === 0) return null;
   return <p className="text-xs text-gray-500 mt-0.5">{parts.join(" · ")}</p>;
+}
+
+// ---------------------------------------------------------------------------
+// Statut de signature de l'utilisateur connecté pour une demande
+// ---------------------------------------------------------------------------
+
+type MySignatureState = "signed" | "to_sign" | null;
+
+function circuitSignatures(sigs: DemandeSignatureLite[], type: "situation" | "bons") {
+  return type === "bons"
+    ? sigs.filter((s) => s.circuit === "bons")
+    : sigs.filter((s) => (s.circuit ?? "situation") !== "bons");
+}
+
+/**
+ * Détermine, pour la demande donnée, si l'utilisateur connecté :
+ *  - a déjà signé            → "signed"   (une entrée avec son user_id existe)
+ *  - doit signer maintenant  → "to_sign"  (c'est son tour sur au moins un circuit)
+ *  - n'est pas concerné      → null
+ * La priorité va à "to_sign" (action attendue) pour faire ressortir le travail en attente.
+ */
+function getMySignatureState(demande: DemandeRavitaillement, user: User | null): MySignatureState {
+  if (!user) return null;
+  const myRole = getCircuitRole(user.role, user.circuit_role);
+  if (!myRole) return null;
+
+  const sigs = demande.signatures ?? [];
+  const signedByMe = sigs.some((s) => s.user_id === user.id);
+
+  // Le circuit de signature ne démarre qu'une fois au moins un véhicule validé par la cellule.
+  const circuitActive = (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide");
+  if (!circuitActive) return signedByMe ? "signed" : null;
+
+  const isDC = demande.departement === "DC";
+  const circuits: { type: "situation" | "bons"; steps: CircuitStep[] }[] = [
+    { type: "situation", steps: isDC ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION },
+    { type: "bons",      steps: isDC ? CIRCUIT_BONS_DC : CIRCUIT_BONS },
+  ];
+
+  const isMyTurn = circuits.some(({ type, steps }) => {
+    const signedRoles = new Set(circuitSignatures(sigs, type).map((s) => s.role));
+    // Prochain signataire = première étape du circuit non encore signée.
+    const prochain = steps.find((step) => !signedRoles.has(step.role));
+    return prochain?.role === myRole;
+  });
+
+  if (isMyTurn) return "to_sign";
+  return signedByMe ? "signed" : null;
+}
+
+function MySignatureBadge({ state }: { state: MySignatureState }) {
+  if (!state) return null;
+  const cfg =
+    state === "signed"
+      ? { label: "✅ Signé", classes: "bg-green-100 text-green-800 border-green-200" }
+      : { label: "⏳ À signer", classes: "bg-amber-100 text-amber-800 border-amber-200" };
+  return (
+    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${cfg.classes}`}>
+      {cfg.label}
+    </span>
+  );
 }
 
 export default function DemandesPage() {
@@ -169,7 +243,7 @@ export default function DemandesPage() {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-green-50 to-teal-50 border-b border-gray-200">
                   <tr>
-                    {["Département", "Date", "Statut", "Détail véhicules", ""].map((h) => (
+                    {["Département", "Date", "Statut", "Ma signature", "Détail véhicules", ""].map((h) => (
                       <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider last:text-right">
                         {h}
                       </th>
@@ -185,6 +259,9 @@ export default function DemandesPage() {
                       </td>
                       <td className="px-6 py-4">
                         <SmartStatutBadge d={demande} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <MySignatureBadge state={getMySignatureState(demande, user)} />
                       </td>
                       <td className="px-6 py-4">
                         <DvDetailLine dvs={demande.demande_vehicules} />
@@ -220,7 +297,10 @@ export default function DemandesPage() {
                     </p>
                     <DvDetailLine dvs={demande.demande_vehicules} />
                   </div>
-                  <SmartStatutBadge d={demande} />
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <SmartStatutBadge d={demande} />
+                    <MySignatureBadge state={getMySignatureState(demande, user)} />
+                  </div>
                 </Link>
               ))}
             </div>

@@ -56,8 +56,6 @@ export default function useAuth(): UseAuthReturn {
       if (result?.token) {
         localStorage.setItem(TOKEN_KEY, result.token);
         setUser(result.user);
-        console.log('user.role dans state:', result.user?.role);
-        console.log('typeof role:', typeof result.user?.role);
         window.location.href = '/demandes';
       }
     } catch (err: any) {

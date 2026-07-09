@@ -32,6 +32,14 @@ export type StatutVehicule = "en_attente" | "ravitaille" | "valide" | "refuse";
 
 export type TypePhoto = "vehicule_avant" | "vehicule_apres" | "pompe";
 
+export interface DemandeSignatureLite {
+  role: string;
+  user_id: string | null;
+  circuit: string; // 'situation' | 'bons'
+  ordre: number;
+  signe_le: string | null;
+}
+
 export interface DemandeRavitaillement {
   id: string;
   departement: string;
@@ -41,6 +49,7 @@ export interface DemandeRavitaillement {
   created_at: string;
   updated_at: string;
   demande_vehicules?: DemandeVehicule[];
+  signatures?: DemandeSignatureLite[];
   creator?: { email: string; full_name: string };
 }
 

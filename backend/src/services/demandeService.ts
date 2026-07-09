@@ -1,4 +1,4 @@
-import { SelectQueryBuilder } from 'typeorm'
+import { In, SelectQueryBuilder } from 'typeorm'
 import { AppDataSource } from '../config/database'
 import { Demande } from '../entities/Demande'
 import { DemandeVehicule } from '../entities/DemandeVehicule'
@@ -94,6 +94,32 @@ export class DemandeService {
     applyAccessFilter(qb, role, userId, departement, circuitRole)
     const rows = await qb.getMany()
 
+    // Charge les signatures de toutes les demandes retournées en une seule requête
+    // groupée (évite un appel séparé par demande côté frontend). On ne remonte que
+    // les champs utiles au calcul du statut de signature — pas les URLs des images.
+    const demandeIds = rows.map((d) => d.id)
+    const sigsByDemande: Record<
+      string,
+      Array<{ role: string; user_id: string | null; circuit: string; ordre: number; signe_le: Date | null }>
+    > = {}
+
+    if (demandeIds.length > 0) {
+      const sigs = await AppDataSource.getRepository(Signature).find({
+        where: { demande_id: In(demandeIds) },
+        select: { demande_id: true, role: true, user_id: true, circuit: true, ordre: true, signe_le: true },
+      })
+      for (const s of sigs) {
+        if (!s.demande_id) continue
+        ;(sigsByDemande[s.demande_id] ??= []).push({
+          role: s.role,
+          user_id: s.user_id,
+          circuit: s.circuit,
+          ordre: s.ordre,
+          signe_le: s.signe_le,
+        })
+      }
+    }
+
     return rows.map((d) => ({
       id: d.id,
       departement: d.departement,
@@ -105,11 +131,11 @@ export class DemandeService {
       creator_email: d.creator?.email ?? null,
       creator_full_name: [d.creator?.nom, d.creator?.prenom].filter(Boolean).join(' ') || null,
       demande_vehicules: d.demande_vehicules ?? [],
+      signatures: sigsByDemande[d.id] ?? [],
     }))
   }
 
   async findById(id: string, role: AppRole, userId: string, departement: string | null, circuitRole: string | null = null) {
-    console.log('findDemandeById id reçu:', id)
     const qb = demandeRepo()
       .createQueryBuilder('d')
       .leftJoinAndSelect('d.creator', 'u')
@@ -270,16 +296,13 @@ export class DemandeService {
       Object.assign(dv, fields)
       const saved = await em.save(DemandeVehicule, dv)
 
-      console.log('Vérification promotion validee_station...')
       if (fields.statut === 'ravitaille') {
         const allDvs = await em.find(DemandeVehicule, { where: { demande_id: demandeId } })
-        console.log(`Statuts véhicules : [${allDvs.map((d) => d.statut).join(', ')}]`)
         if (allDvs.every((d) => d.statut === 'ravitaille')) {
           const demande = await em.findOne(Demande, { where: { id: demandeId } })
           if (demande && ['validee_dept', 'en_attente'].includes(demande.statut)) {
             demande.statut = 'validee_station'
             await em.save(Demande, demande)
-            console.log('Demande promue à validee_station !')
             return { dv: saved, promoted: true, promotedDepartement: demande.departement }
           }
         }

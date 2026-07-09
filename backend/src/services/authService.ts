@@ -10,17 +10,7 @@ function repo() {
 
 export class AuthService {
   async login(email: string, password: string) {
-    console.log('email reçu:', email)
     const user = await repo().findOne({ where: { email: email.toLowerCase().trim() } })
-    console.log('user trouvé:', user ? 'oui' : 'non')
-    if (user) {
-      console.log('password_hash:', user.password_hash)
-      if (!user.password_hash) {
-        throw new Error('Mot de passe non configuré')
-      }
-      const valid = await bcrypt.compare(password, user.password_hash)
-      console.log('mot de passe valide:', valid)
-    }
     if (!user) {
       throw Object.assign(new Error('Identifiants incorrects'), { status: 401 })
     }
