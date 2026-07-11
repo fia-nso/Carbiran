@@ -40,7 +40,10 @@ function applyAccessFilter(
       if (circuitRole === 'directeur_commercial') {
         qb.andWhere('d.departement = :dept', { dept: 'DC' })
       } else {
-        qb.andWhere("d.statut = 'validee_cellule'")
+        // Le signataire (DT/DG/DF) voit la demande dès que la situation a été
+        // soumise pour signature — indépendamment du statut de validation, afin
+        // de supporter la soumission partielle (statut validee_dept/station).
+        qb.andWhere('d.situation_soumise = true')
       }
       break
     default:
