@@ -48,6 +48,20 @@ export const getDemande = async (req: Request, res: Response): Promise<void> => 
   }
 }
 
+export const getHistoriqueVehicules = async (req: Request, res: Response): Promise<void> => {
+  const id = req.params['id'] as string
+  const { role } = req.user!
+  try {
+    const data = await demandeService.getHistoriqueVehicules(id, role)
+    if (data === null) { res.status(404).json({ error: 'Demande introuvable' }); return }
+    res.json(data)
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
+    console.error('[GET /demandes/:id/historique-vehicules]', err)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+}
+
 export const postDemande = async (req: Request, res: Response): Promise<void> => {
   const { departement, vehicule_ids } = req.body as { departement?: string; vehicule_ids?: number[] }
 

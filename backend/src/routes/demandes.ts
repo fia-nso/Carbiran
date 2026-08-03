@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, requireRole } from '../middleware/auth'
 import {
   getBon,
   getDemandes,
   getDemande,
+  getHistoriqueVehicules,
   postDemande,
   patchDemande,
   deleteDemande,
@@ -15,6 +16,7 @@ const router = Router()
 
 router.get('/bons/:dvId',                getBon)
 router.get('/',                          requireAuth, getDemandes)
+router.get('/:id/historique-vehicules',  requireAuth, requireRole('Admin', 'MENAGER'), getHistoriqueVehicules)
 router.get('/:id',                       requireAuth, getDemande)
 router.post('/',                         requireAuth, postDemande)
 router.patch('/:id',                     requireAuth, patchDemande)

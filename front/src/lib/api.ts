@@ -85,6 +85,10 @@ export const apiReplaceDemandeVehicules = (demandeId: string, vehicule_ids: numb
 export const apiPatchDemandeVehicule = (demandeId: string, dvId: string, data: Record<string, unknown>) =>
   api.patch(`/demandes/${demandeId}/vehicules/${dvId}`, data).then(r => r.data)
 
+// Rapport de consommation par véhicule (Cellule uniquement) — lecture seule
+export const apiGetHistoriqueVehicules = (id: string) =>
+  api.get(`/demandes/${id}/historique-vehicules`).then(r => r.data)
+
 // Signatures
 export const apiGetSignatures = (demandeId: string) =>
   api.get(`/signatures/${demandeId}`).then(r => r.data)

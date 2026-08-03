@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import { useParams, Link } from "react-router-dom";
-import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement } from "@/lib/api";
+import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules } from "@/lib/api";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -1096,6 +1096,9 @@ export default function DetailDemandePage() {
         </p>
       )}
 
+      {/* Rapport de consommation — Cellule uniquement, aide à juger avant soumission */}
+      {isCellule && <RapportConsommationSection demandeId={demande.id} />}
+
       {/* Vehicles list — pour non-acteurs du circuit, pour cellule (actions), DG et directeur_commercial (lecture seule) */}
       {(!isCircuitActor || isCellule || isDG || isDirecteurCommercial) && (
         <div className="space-y-4">
@@ -1173,6 +1176,172 @@ export default function DetailDemandePage() {
 
       <div className="w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-green-600 rounded-full opacity-80" />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RapportConsommationSection — aide à la décision pour la Cellule
+// ---------------------------------------------------------------------------
+//
+// Affiche, par véhicule, la consommation calculée à partir du ravitaillement
+// précédent. AUCUN jugement automatique (pas de "normal"/"anormal") : on montre
+// seulement les chiffres, la Cellule juge elle-même. Lecture seule.
+
+type StatutCalcul = "ok" | "pas_historique" | "km_manquant" | "km_incoherent";
+
+interface HistoriqueVehicule {
+  vehicule_id: number;
+  matricule: string | null;
+  date_precedent: string | null;
+  km_precedent: number | null;
+  km_actuel: number | null;
+  distance: number | null;
+  litres: number | null;
+  consommation: number | null;
+  statut_calcul: StatutCalcul;
+}
+
+function fmtKm(v: number | null): string {
+  return v != null ? `${formatNumber(v)} km` : "—";
+}
+
+function RapportConsommationSection({ demandeId }: { demandeId: string }) {
+  const [rows, setRows] = useState<HistoriqueVehicule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(null);
+    apiGetHistoriqueVehicules(demandeId)
+      .then((data: { vehicules?: HistoriqueVehicule[] }) => {
+        if (alive) setRows(data.vehicules ?? []);
+      })
+      .catch((e: unknown) => {
+        if (alive) setError(e instanceof Error ? e.message : "Erreur de chargement.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [demandeId]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-semibold text-gray-900">Rapport de consommation</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Consommation comparée au ravitaillement précédent de chaque véhicule. À
+          apprécier par la Cellule — aucun jugement automatique.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="px-6 py-8 flex items-center gap-3 text-gray-500 text-sm">
+          <div className="animate-spin w-5 h-5 border-2 border-gray-200 border-t-green-500 rounded-full" />
+          Chargement du rapport…
+        </div>
+      ) : error ? (
+        <p className="px-6 py-6 text-sm text-red-600">{error}</p>
+      ) : rows.length === 0 ? (
+        <p className="px-6 py-6 text-sm text-gray-400">Aucun véhicule à analyser.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-green-50 text-green-800 text-xs uppercase tracking-wider">
+                <th className="px-4 py-3 text-left font-semibold">Matricule</th>
+                <th className="px-4 py-3 text-left font-semibold">Dernier ravitaillement</th>
+                <th className="px-4 py-3 text-right font-semibold">Km précédent</th>
+                <th className="px-4 py-3 text-right font-semibold">Km actuel</th>
+                <th className="px-4 py-3 text-right font-semibold">Distance</th>
+                <th className="px-4 py-3 text-right font-semibold">Litres</th>
+                <th className="px-4 py-3 text-right font-semibold">Consommation</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r) => (
+                <RapportRow key={r.vehicule_id} row={r} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RapportRow({ row }: { row: HistoriqueVehicule }) {
+  const incoherent = row.statut_calcul === "km_incoherent";
+
+  // Cellules "état" fusionnées quand il n'y a pas de calcul possible.
+  function statusCell() {
+    switch (row.statut_calcul) {
+      case "pas_historique":
+        return (
+          <td colSpan={5} className="px-4 py-3 text-center text-gray-500 italic">
+            Premier ravitaillement enregistré
+          </td>
+        );
+      case "km_manquant":
+        return (
+          <td colSpan={5} className="px-4 py-3 text-center text-gray-500 italic">
+            Compteur non disponible
+          </td>
+        );
+      default:
+        return null;
+    }
+  }
+
+  if (row.statut_calcul === "pas_historique" || row.statut_calcul === "km_manquant") {
+    return (
+      <tr>
+        <td className="px-4 py-3 font-medium text-gray-900">{row.matricule ?? "—"}</td>
+        {statusCell()}
+        <td className="px-4 py-3 text-right text-gray-700">
+          {row.litres != null ? `${formatNumber(row.litres)} L` : "—"}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className={incoherent ? "bg-amber-50" : undefined}>
+      <td className="px-4 py-3 font-medium text-gray-900">{row.matricule ?? "—"}</td>
+      <td className="px-4 py-3 text-gray-700">
+        {row.date_precedent
+          ? new Date(row.date_precedent).toLocaleDateString("fr-FR")
+          : "—"}
+      </td>
+      <td className="px-4 py-3 text-right text-gray-700">{fmtKm(row.km_precedent)}</td>
+      <td className="px-4 py-3 text-right text-gray-700">{fmtKm(row.km_actuel)}</td>
+      <td className="px-4 py-3 text-right text-gray-700">
+        {incoherent ? "—" : fmtKm(row.distance)}
+      </td>
+      <td className="px-4 py-3 text-right text-gray-700">
+        {row.litres != null ? `${formatNumber(row.litres)} L` : "—"}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {incoherent ? (
+          <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            Kilométrage incohérent
+          </span>
+        ) : row.consommation != null ? (
+          <span className="font-semibold text-green-700">
+            {formatNumber(row.consommation)} L/100km
+          </span>
+        ) : (
+          "—"
+        )}
+      </td>
+    </tr>
   );
 }
 

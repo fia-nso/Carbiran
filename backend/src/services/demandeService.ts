@@ -315,6 +315,100 @@ export class DemandeService {
     })
   }
 
+  /**
+   * Rapport de consommation par véhicule d'une demande.
+   *
+   * Pour chaque véhicule de la demande courante, on cherche son ravitaillement
+   * PRÉCÉDENT dans le circuit demande (table demande_vehicules uniquement — pas
+   * le journal direct ravitaillements_vehicules) : même véhicule, statut 'valide',
+   * kilométrage renseigné, dans une AUTRE demande créée avant, le plus récent.
+   *
+   * On ne rend AUCUN jugement (normal/anormal) : uniquement les chiffres bruts et
+   * un statut de calcul pour que la Cellule décide elle-même. Lecture seule.
+   * Réservé à Admin et MENAGER (la Cellule) — le contrôle d'accès est fait ici.
+   */
+  async getHistoriqueVehicules(demandeId: string, role: AppRole) {
+    if (role !== 'Admin' && role !== 'MENAGER') {
+      throw Object.assign(new Error('Accès refusé'), { status: 403 })
+    }
+
+    const demande = await demandeRepo().findOne({
+      where: { id: demandeId },
+      select: { id: true, created_at: true },
+    })
+    if (!demande) return null
+
+    const currentDvs = await dvRepo()
+      .createQueryBuilder('dv')
+      .leftJoinAndSelect('dv.vehicule', 'v')
+      .where('dv.demande_id = :id', { id: demandeId })
+      .orderBy('dv.created_at', 'ASC')
+      .getMany()
+
+    const vehicules = []
+    for (const dv of currentDvs) {
+      const kmActuel = dv.kilometrage != null ? parseFloat(dv.kilometrage) : null
+      const litres = dv.n_liter != null ? parseFloat(dv.n_liter) : null
+
+      const base = {
+        vehicule_id: dv.vehicule_id,
+        matricule: dv.vehicule?.matricule ?? null,
+        date_precedent: null as Date | null,
+        km_precedent: null as number | null,
+        km_actuel: kmActuel,
+        distance: null as number | null,
+        litres,
+        consommation: null as number | null,
+        statut_calcul: 'ok' as 'ok' | 'pas_historique' | 'km_manquant' | 'km_incoherent',
+      }
+
+      // Véhicule sans compteur exploitable sur ce ravitaillement.
+      if (kmActuel === null) {
+        vehicules.push({ ...base, statut_calcul: 'km_manquant' as const })
+        continue
+      }
+
+      // Ravitaillement précédent (circuit demande), le plus récent avant celui-ci.
+      const prev = await dvRepo()
+        .createQueryBuilder('dv')
+        .where('dv.vehicule_id = :vid', { vid: dv.vehicule_id })
+        .andWhere("dv.statut = 'valide'")
+        .andWhere('dv.kilometrage IS NOT NULL')
+        .andWhere('dv.demande_id != :did', { did: demandeId })
+        .andWhere('dv.created_at < :cutoff', { cutoff: demande.created_at })
+        .orderBy('dv.created_at', 'DESC')
+        .getOne()
+
+      if (!prev || prev.kilometrage === null) {
+        vehicules.push({ ...base, statut_calcul: 'pas_historique' as const })
+        continue
+      }
+
+      const kmPrecedent = parseFloat(prev.kilometrage)
+      base.date_precedent = prev.created_at
+      base.km_precedent = kmPrecedent
+
+      // Compteur remis à zéro, remplacé, ou saisie erronée.
+      if (kmActuel <= kmPrecedent) {
+        vehicules.push({
+          ...base,
+          distance: kmActuel - kmPrecedent,
+          statut_calcul: 'km_incoherent' as const,
+        })
+        continue
+      }
+
+      const distance = kmActuel - kmPrecedent
+      // distance > 0 garanti ici → pas de division par zéro.
+      const consommation =
+        litres != null ? Math.round((litres / distance) * 100 * 10) / 10 : null
+
+      vehicules.push({ ...base, distance, consommation, statut_calcul: 'ok' as const })
+    }
+
+    return { demande_id: demandeId, vehicules }
+  }
+
   async getBon(dvId: string) {
     const dv = await dvRepo().findOne({
       where: { id: dvId },
