@@ -27,6 +27,14 @@ import type {
 } from "@/types";
 
 // ---------------------------------------------------------------------------
+// Parametres metier
+// ---------------------------------------------------------------------------
+
+// Seuil d'alerte de surconsommation, en L/100km. Modifier ici pour ajuster
+// l'alerte affichee dans le rapport de consommation (affichage uniquement).
+const SEUIL_CONSOMMATION = 10; // L/100km
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -1205,6 +1213,15 @@ function fmtKm(v: number | null): string {
   return v != null ? `${formatNumber(v)} km` : "—";
 }
 
+// Vrai uniquement quand le calcul a abouti et depasse le seuil.
+function isSurconsommation(row: HistoriqueVehicule): boolean {
+  return (
+    row.statut_calcul === "ok" &&
+    row.consommation != null &&
+    row.consommation > SEUIL_CONSOMMATION
+  );
+}
+
 function RapportConsommationSection({ demandeId }: { demandeId: string }) {
   const [rows, setRows] = useState<HistoriqueVehicule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1229,6 +1246,8 @@ function RapportConsommationSection({ demandeId }: { demandeId: string }) {
     };
   }, [demandeId]);
 
+  const nbSurconsommation = rows.filter(isSurconsommation).length;
+
   return (
     <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100">
@@ -1249,26 +1268,38 @@ function RapportConsommationSection({ demandeId }: { demandeId: string }) {
       ) : rows.length === 0 ? (
         <p className="px-6 py-6 text-sm text-gray-400">Aucun véhicule à analyser.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-green-50 text-green-800 text-xs uppercase tracking-wider">
-                <th className="px-4 py-3 text-left font-semibold">Matricule</th>
-                <th className="px-4 py-3 text-left font-semibold">Dernier ravitaillement</th>
-                <th className="px-4 py-3 text-right font-semibold">Km précédent</th>
-                <th className="px-4 py-3 text-right font-semibold">Km actuel</th>
-                <th className="px-4 py-3 text-right font-semibold">Distance</th>
-                <th className="px-4 py-3 text-right font-semibold">Litres</th>
-                <th className="px-4 py-3 text-right font-semibold">Consommation</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((r) => (
-                <RapportRow key={r.vehicule_id} row={r} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {nbSurconsommation > 0 && (
+            <div className="mx-4 mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2">
+              <span className="text-red-600 text-base leading-none">⚠</span>
+              <p className="text-sm font-medium text-red-700">
+                {nbSurconsommation > 1
+                  ? `${nbSurconsommation} véhicules dépassent le seuil de ${SEUIL_CONSOMMATION} L/100km`
+                  : `1 véhicule dépasse le seuil de ${SEUIL_CONSOMMATION} L/100km`}
+              </p>
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-green-50 text-green-800 text-xs uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left font-semibold">Matricule</th>
+                  <th className="px-4 py-3 text-left font-semibold">Dernier ravitaillement</th>
+                  <th className="px-4 py-3 text-right font-semibold">Km précédent</th>
+                  <th className="px-4 py-3 text-right font-semibold">Km actuel</th>
+                  <th className="px-4 py-3 text-right font-semibold">Distance</th>
+                  <th className="px-4 py-3 text-right font-semibold">Litres</th>
+                  <th className="px-4 py-3 text-right font-semibold">Consommation</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((r) => (
+                  <RapportRow key={r.vehicule_id} row={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
@@ -1276,6 +1307,7 @@ function RapportConsommationSection({ demandeId }: { demandeId: string }) {
 
 function RapportRow({ row }: { row: HistoriqueVehicule }) {
   const incoherent = row.statut_calcul === "km_incoherent";
+  const surconso = isSurconsommation(row);
 
   // Cellules "état" fusionnées quand il n'y a pas de calcul possible.
   function statusCell() {
@@ -1310,7 +1342,7 @@ function RapportRow({ row }: { row: HistoriqueVehicule }) {
   }
 
   return (
-    <tr className={incoherent ? "bg-amber-50" : undefined}>
+    <tr className={incoherent ? "bg-amber-50" : surconso ? "bg-red-50" : undefined}>
       <td className="px-4 py-3 font-medium text-gray-900">{row.matricule ?? "—"}</td>
       <td className="px-4 py-3 text-gray-700">
         {row.date_precedent
@@ -1334,9 +1366,19 @@ function RapportRow({ row }: { row: HistoriqueVehicule }) {
             Kilométrage incohérent
           </span>
         ) : row.consommation != null ? (
-          <span className="font-semibold text-green-700">
-            {formatNumber(row.consommation)} L/100km
-          </span>
+          surconso ? (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-red-700">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              {formatNumber(row.consommation)} L/100km
+              <span className="text-xs font-medium">Surconsommation</span>
+            </span>
+          ) : (
+            <span className="font-semibold text-green-700">
+              {formatNumber(row.consommation)} L/100km
+            </span>
+          )
         ) : (
           "—"
         )}

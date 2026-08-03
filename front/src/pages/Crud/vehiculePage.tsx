@@ -18,6 +18,15 @@ interface VehiculeFormState {
 
 const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 const ZONES_FIXES = ["Zone A", "Zone B", "RX&SYS", "FO", "CPDE"] as const;
 
 const initialFormState: VehiculeFormState = {
@@ -125,6 +134,187 @@ export default function VehiculePage() {
     }
   }
 
+  // Impression / export PDF de la liste des vehicules telle qu'affichee
+  // (recherche et filtre centre appliques).
+  function handleDownloadPdf() {
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
+
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenetre d'impression.");
+      return;
+    }
+
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
+
+    const rowsHtml =
+      vehicules.length === 0
+        ? '<tr><td colspan="7" class="empty">Aucun vehicule ne correspond aux filtres.</td></tr>'
+        : vehicules
+            .map(
+              (item, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${escapeHtml(item.vehicule)}</td>
+                  <td>${escapeHtml(item.matricule)}</td>
+                  <td>${escapeHtml(item.utilisationAffectation)}</td>
+                  <td>${escapeHtml(item.chauffeurResponsable || "-")}</td>
+                  <td>${escapeHtml(item.zone)}</td>
+                  <td>${escapeHtml(item.centre || "-")}</td>
+                </tr>
+              `
+            )
+            .join("");
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Liste des vehicules</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 24px;
+              color: #1f2937;
+            }
+            .print-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 24px;
+              border-bottom: 3px solid #166534;
+              padding-bottom: 16px;
+              margin-bottom: 18px;
+            }
+            .print-header img {
+              width: 80px;
+              height: 80px;
+              object-fit: contain;
+              flex-shrink: 0;
+            }
+            .print-header-text {
+              flex: 1;
+              text-align: center;
+            }
+            .print-header-text h2,
+            .print-header-text h3,
+            .print-header-text h4 {
+              margin: 0;
+              font-weight: 700;
+              color: #111827;
+            }
+            .print-header-text h2 {
+              font-size: 20px;
+              letter-spacing: 0.04em;
+            }
+            .print-header-text h3 {
+              font-size: 16px;
+              margin-top: 4px;
+            }
+            .print-header-text h4 {
+              font-size: 15px;
+              margin-top: 4px;
+            }
+            h1 {
+              margin: 0 0 8px;
+              font-size: 22px;
+            }
+            .date-line {
+              margin: 0 0 16px;
+              color: #4b5563;
+              font-size: 13px;
+            }
+            .summary {
+              margin-bottom: 20px;
+              padding: 12px 16px;
+              background: #ecfdf5;
+              border: 1px solid #a7f3d0;
+              border-radius: 12px;
+              font-size: 13px;
+              line-height: 1.7;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              border: 1px solid #d1d5db;
+              padding: 10px 8px;
+              text-align: left;
+              vertical-align: top;
+              font-size: 12px;
+            }
+            th {
+              background: #166534;
+              color: white;
+            }
+            .empty {
+              text-align: center;
+              color: #6b7280;
+              font-style: italic;
+              padding: 24px 8px;
+            }
+            tbody tr:nth-child(even) {
+              background: #f9fafb;
+            }
+            @media print {
+              @page {
+                margin: 0;
+                size: A4 landscape;
+              }
+              body {
+                margin: 12px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="print-header-text">
+              <h2>RIMATEL</h2>
+              <h3>Direction Générale</h3>
+              <h4>Cellule de Contrôle, Suivi &amp; Évaluation</h4>
+            </div>
+            <div style="width: 80px;"></div>
+          </div>
+          <h1>Liste des vehicules</h1>
+          <p class="date-line">Edite le ${escapeHtml(new Date().toLocaleDateString("fr-FR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }))}</p>
+          <div class="summary">
+            <strong>Nombre de vehicules :</strong> ${vehicules.length}
+            <br />
+            <strong>Centre :</strong> ${escapeHtml(centreFilter || "Tous les centres")}
+            <br />
+            <strong>Recherche :</strong> ${escapeHtml(search.trim() || "Aucune")}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Vehicule</th>
+                <th>Matricule</th>
+                <th>Utilisation / Affectation</th>
+                <th>Chauffeur</th>
+                <th>Zone</th>
+                <th>Centre</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
   async function handleDelete(item: Vehicule) {
     const confirmed = window.confirm(
       `Supprimer le vehicule "${item.vehicule}" (${item.matricule}) ? Cette action est irreversible.`
@@ -159,8 +349,11 @@ export default function VehiculePage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
+            {/* Barre d'actions — hauteur commune h-12 sur tous les elements
+                (les bordures ne decalent pas la hauteur), pleine largeur sur
+                mobile, alignes sur une meme ligne des sm. */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center lg:justify-end gap-3 w-full lg:w-auto">
+              <div className="relative w-full sm:w-80">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -171,14 +364,14 @@ export default function VehiculePage() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Rechercher un vehicule..."
-                  className="pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 w-full sm:w-80 bg-white shadow-sm"
+                  className="h-12 w-full pl-10 pr-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white shadow-sm"
                 />
               </div>
 
               <select
                 value={centreFilter}
                 onChange={(event) => setCentreFilter(event.target.value)}
-                className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white shadow-sm text-gray-700"
+                className="h-12 w-full sm:w-auto px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white shadow-sm text-gray-700"
               >
                 <option value="">Tous les centres</option>
                 {centresDisponibles.map((centre) => (
@@ -186,12 +379,22 @@ export default function VehiculePage() {
                 ))}
               </select>
 
+              <button
+                onClick={handleDownloadPdf}
+                className="h-12 w-full sm:w-auto px-6 inline-flex items-center justify-center gap-2 border border-green-300 text-green-700 bg-white rounded-xl hover:bg-green-50 transition-all duration-200 shadow-sm font-medium"
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                Telecharger PDF
+              </button>
+
               {!isViewer && (
                 <button
                   onClick={openAddModal}
-                  className="bg-gradient-to-r from-green-500 to-teal-600 text-white px-6 py-3 rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
+                  className="h-12 w-full sm:w-auto px-6 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl font-medium"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   Ajouter un vehicule

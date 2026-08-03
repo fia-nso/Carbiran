@@ -5,6 +5,7 @@ import { DemandeVehicule } from '../entities/DemandeVehicule'
 import { Signature } from '../entities/Signature'
 import { SignatureUtilisateur } from '../entities/SignatureUtilisateur'
 import type { AppRole } from '../types/index'
+import { evaluerConsommation } from './consommation'
 
 function demandeRepo() {
   return AppDataSource.getRepository(Demande)
@@ -362,9 +363,9 @@ export class DemandeService {
         statut_calcul: 'ok' as 'ok' | 'pas_historique' | 'km_manquant' | 'km_incoherent',
       }
 
-      // Véhicule sans compteur exploitable sur ce ravitaillement.
+      // Véhicule sans compteur exploitable : inutile d'interroger l'historique.
       if (kmActuel === null) {
-        vehicules.push({ ...base, statut_calcul: 'km_manquant' as const })
+        vehicules.push({ ...base, ...evaluerConsommation({ kmActuel, kmPrecedent: null, litres }) })
         continue
       }
 
@@ -379,31 +380,13 @@ export class DemandeService {
         .orderBy('dv.created_at', 'DESC')
         .getOne()
 
-      if (!prev || prev.kilometrage === null) {
-        vehicules.push({ ...base, statut_calcul: 'pas_historique' as const })
-        continue
+      const kmPrecedent = prev && prev.kilometrage !== null ? parseFloat(prev.kilometrage) : null
+      if (prev && kmPrecedent !== null) {
+        base.date_precedent = prev.created_at
+        base.km_precedent = kmPrecedent
       }
 
-      const kmPrecedent = parseFloat(prev.kilometrage)
-      base.date_precedent = prev.created_at
-      base.km_precedent = kmPrecedent
-
-      // Compteur remis à zéro, remplacé, ou saisie erronée.
-      if (kmActuel <= kmPrecedent) {
-        vehicules.push({
-          ...base,
-          distance: kmActuel - kmPrecedent,
-          statut_calcul: 'km_incoherent' as const,
-        })
-        continue
-      }
-
-      const distance = kmActuel - kmPrecedent
-      // distance > 0 garanti ici → pas de division par zéro.
-      const consommation =
-        litres != null ? Math.round((litres / distance) * 100 * 10) / 10 : null
-
-      vehicules.push({ ...base, distance, consommation, statut_calcul: 'ok' as const })
+      vehicules.push({ ...base, ...evaluerConsommation({ kmActuel, kmPrecedent, litres }) })
     }
 
     return { demande_id: demandeId, vehicules }

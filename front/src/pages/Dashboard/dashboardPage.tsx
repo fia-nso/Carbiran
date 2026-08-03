@@ -52,6 +52,15 @@ function formatMetric(value: number) {
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 export default function DashboardPage() {
   const { ravitaillements, loading, reload } = useRavitaillementsVehicule();
   useRealtimeSync({ onRavitaillementChange: reload });
@@ -64,8 +73,9 @@ export default function DashboardPage() {
   const [filterCentre, setFilterCentre] = useState("");
   const [filterMatricule, setFilterMatricule] = useState("");
 
-  // "Consommation par véhicule" — filtres véhicule + mois (indépendants du reste)
+  // "Consommation par véhicule" — filtres véhicule + zone + mois (indépendants du reste)
   const [consoVehicule, setConsoVehicule] = useState<string>(""); // "" = tous, sinon id véhicule
+  const [consoZone, setConsoZone] = useState<string>(""); // "" = toutes les zones
   // Multi-sélection de mois. [] = cumul total, 1 = ce mois, 2+ = comparaison en colonnes.
   const [consoMonths, setConsoMonths] = useState<string[]>([]);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
@@ -222,6 +232,15 @@ export default function DashboardPage() {
     return Array.from(map.values()).sort((a, b) => a.matricule.localeCompare(b.matricule));
   }, [ravitaillements]);
 
+  // Zones distinctes des véhicules ravitaillés (pour le filtre zone).
+  const consoZoneOptions = useMemo(() => {
+    const zones = new Set<string>();
+    for (const item of ravitaillements) {
+      if (item.vehicule?.zone) zones.add(item.vehicule.zone);
+    }
+    return Array.from(zones).sort();
+  }, [ravitaillements]);
+
   // Liste des mois (YYYY-MM) où il existe au moins un ravitaillement, les plus récents d'abord.
   const consoMonthOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -277,10 +296,11 @@ export default function DashboardPage() {
     () =>
       ravitaillements.filter((r) => {
         if (consoVehicule !== "" && r.vehiculeId !== Number(consoVehicule)) return false;
+        if (consoZone !== "" && r.vehicule?.zone !== consoZone) return false;
         if (consoMonths.length === 1 && monthKeyOf(r.date) !== consoMonths[0]) return false;
         return true;
       }),
-    [ravitaillements, consoVehicule, consoMonths]
+    [ravitaillements, consoVehicule, consoZone, consoMonths]
   );
 
   // Mode comparaison (2 mois ou plus) : par véhicule, agrégats par mois côte à côte.
@@ -298,6 +318,7 @@ export default function DashboardPage() {
     >();
     for (const item of ravitaillements) {
       if (consoVehicule !== "" && item.vehiculeId !== Number(consoVehicule)) continue;
+      if (consoZone !== "" && item.vehicule?.zone !== consoZone) continue;
       const key = monthKeyOf(item.date);
       if (key === null || !monthSet.has(key)) continue;
       let entry = map.get(item.vehiculeId);
@@ -329,7 +350,7 @@ export default function DashboardPage() {
       }
     }
     return { rows, totalsByMonth };
-  }, [isComparison, consoMonths, consoVehicule, ravitaillements]);
+  }, [isComparison, consoMonths, consoVehicule, consoZone, ravitaillements]);
 
   const consoRows = useMemo(() => {
     const map = new Map<
@@ -364,6 +385,298 @@ export default function DashboardPage() {
       ),
     [consoRows]
   );
+
+  // Impression / export PDF du tableau "Consommation par vehicule" tel qu'affiche
+  // (memes filtres : vehicule, zone, mois ou comparaison multi-mois).
+  function handleDownloadConsoPdf() {
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
+
+    if (!printWindow) {
+      alert("Impossible d'ouvrir la fenetre d'impression.");
+      return;
+    }
+
+    const logoUrl = `${window.location.origin}/LOGO.webp`;
+
+    const selectedVehicule =
+      consoVehicule === ""
+        ? null
+        : consoVehiculeList.find((v) => String(v.id) === consoVehicule) ?? null;
+
+    const vehiculeFilterLabel = selectedVehicule
+      ? `${selectedVehicule.matricule} — ${selectedVehicule.vehicule}`
+      : "Tous les vehicules";
+    const zoneFilterLabel = consoZone === "" ? "Toutes les zones" : consoZone;
+    const periodeFilterLabel =
+      consoMonths.length === 0
+        ? "Cumul de tous les mois"
+        : consoMonths.length === 1
+          ? labelOfMonth(consoMonths[0])
+          : `Comparaison : ${selectedMonthsSorted.map(labelOfMonth).join(", ")}`;
+
+    let tableHtml: string;
+
+    if (isComparison && comparison) {
+      const monthHeadHtml = selectedMonthsSorted
+        .map((key) => `<th colspan="3" class="month-group">${escapeHtml(labelOfMonth(key))}</th>`)
+        .join("");
+      const subHeadHtml = selectedMonthsSorted
+        .map(() => '<th class="num group-start">Nb</th><th class="num">Litres</th><th class="num">Montant</th>')
+        .join("");
+      const bodyHtml =
+        comparison.rows.length === 0
+          ? `<tr><td colspan="${2 + selectedMonthsSorted.length * 3}" class="empty">Aucun ravitaillement pour les filtres selectionnes.</td></tr>`
+          : comparison.rows
+              .map((row) => {
+                const cells = selectedMonthsSorted
+                  .map((key) => {
+                    const cell = row.byMonth[key];
+                    return `
+                      <td class="num group-start">${cell ? formatCount(cell.count) : "—"}</td>
+                      <td class="num">${cell ? formatMetric(cell.litres) : "—"}</td>
+                      <td class="num">${cell ? formatAmount(cell.montant) : "—"}</td>
+                    `;
+                  })
+                  .join("");
+                return `
+                  <tr>
+                    <td>${escapeHtml(row.matricule)}</td>
+                    <td>${escapeHtml(row.nom)}</td>
+                    ${cells}
+                  </tr>
+                `;
+              })
+              .join("");
+      const footHtml =
+        comparison.rows.length === 0
+          ? ""
+          : `
+            <tfoot>
+              <tr>
+                <td colspan="2">Total (${comparison.rows.length} vehicule${comparison.rows.length > 1 ? "s" : ""})</td>
+                ${selectedMonthsSorted
+                  .map((key) => {
+                    const t = comparison.totalsByMonth[key];
+                    return `
+                      <td class="num group-start">${formatCount(t.count)}</td>
+                      <td class="num">${formatMetric(t.litres)}</td>
+                      <td class="num">${formatAmount(t.montant)}</td>
+                    `;
+                  })
+                  .join("")}
+              </tr>
+            </tfoot>
+          `;
+      tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2">Matricule</th>
+              <th rowspan="2">Vehicule</th>
+              ${monthHeadHtml}
+            </tr>
+            <tr>${subHeadHtml}</tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
+          ${footHtml}
+        </table>
+      `;
+    } else {
+      const bodyHtml =
+        consoRows.length === 0
+          ? '<tr><td colspan="5" class="empty">Aucun ravitaillement pour les filtres selectionnes.</td></tr>'
+          : consoRows
+              .map(
+                (row) => `
+                  <tr>
+                    <td>${escapeHtml(row.matricule)}</td>
+                    <td>${escapeHtml(row.nom)}</td>
+                    <td class="num">${formatCount(row.count)}</td>
+                    <td class="num">${formatMetric(row.litres)}</td>
+                    <td class="num">${formatAmount(row.montant)}</td>
+                  </tr>
+                `
+              )
+              .join("");
+      const footHtml =
+        consoRows.length === 0
+          ? ""
+          : `
+            <tfoot>
+              <tr>
+                <td colspan="2">Total (${consoRows.length} vehicule${consoRows.length > 1 ? "s" : ""})</td>
+                <td class="num">${formatCount(consoTotals.count)}</td>
+                <td class="num">${formatMetric(consoTotals.litres)}</td>
+                <td class="num">${formatAmount(consoTotals.montant)}</td>
+              </tr>
+            </tfoot>
+          `;
+      tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>Matricule</th>
+              <th>Vehicule</th>
+              <th class="num">Nb ravit.</th>
+              <th class="num">Total litres</th>
+              <th class="num">Total montant</th>
+            </tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
+          ${footHtml}
+        </table>
+      `;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Consommation par vehicule</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 24px;
+              color: #1f2937;
+            }
+            .print-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 24px;
+              border-bottom: 3px solid #166534;
+              padding-bottom: 16px;
+              margin-bottom: 18px;
+            }
+            .print-header img {
+              width: 80px;
+              height: 80px;
+              object-fit: contain;
+              flex-shrink: 0;
+            }
+            .print-header-text {
+              flex: 1;
+              text-align: center;
+            }
+            .print-header-text h2,
+            .print-header-text h3,
+            .print-header-text h4 {
+              margin: 0;
+              font-weight: 700;
+              color: #111827;
+            }
+            .print-header-text h2 {
+              font-size: 20px;
+              letter-spacing: 0.04em;
+            }
+            .print-header-text h3 {
+              font-size: 16px;
+              margin-top: 4px;
+            }
+            .print-header-text h4 {
+              font-size: 15px;
+              margin-top: 4px;
+            }
+            h1 {
+              margin: 0 0 8px;
+              font-size: 22px;
+            }
+            .date-line {
+              margin: 0 0 16px;
+              color: #4b5563;
+              font-size: 13px;
+            }
+            .summary {
+              margin-bottom: 20px;
+              padding: 12px 16px;
+              background: #ecfdf5;
+              border: 1px solid #a7f3d0;
+              border-radius: 12px;
+              font-size: 13px;
+              line-height: 1.7;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              border: 1px solid #d1d5db;
+              padding: 10px 8px;
+              text-align: left;
+              vertical-align: top;
+              font-size: 12px;
+            }
+            th {
+              background: #166534;
+              color: white;
+            }
+            th.month-group {
+              text-align: center;
+            }
+            td.num, th.num {
+              text-align: right;
+            }
+            .group-start {
+              border-left: 2px solid #166534;
+            }
+            .empty {
+              text-align: center;
+              color: #6b7280;
+              font-style: italic;
+              padding: 24px 8px;
+            }
+            tbody tr:nth-child(even) {
+              background: #f9fafb;
+            }
+            tfoot td {
+              background: #fffbeb;
+              font-weight: 700;
+            }
+            @media print {
+              @page {
+                margin: 0;
+                size: A4 landscape;
+              }
+              body {
+                margin: 12px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <img src="${logoUrl}" alt="Logo RIMATEL" />
+            <div class="print-header-text">
+              <h2>RIMATEL</h2>
+              <h3>Direction Générale</h3>
+              <h4>Cellule de Contrôle, Suivi &amp; Évaluation</h4>
+            </div>
+            <div style="width: 80px;"></div>
+          </div>
+          <h1>Consommation par vehicule</h1>
+          <p class="date-line">Edite le ${escapeHtml(new Date().toLocaleDateString("fr-FR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }))}</p>
+          <div class="summary">
+            <strong>Vehicule :</strong> ${escapeHtml(vehiculeFilterLabel)}
+            <br />
+            <strong>Zone :</strong> ${escapeHtml(zoneFilterLabel)}
+            <br />
+            <strong>Periode :</strong> ${escapeHtml(periodeFilterLabel)}
+          </div>
+          ${tableHtml}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
 
   function handleRowClick(monthIndex: number) {
     if (selectedMonthIndex === monthIndex) {
@@ -715,7 +1028,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start gap-3 w-full lg:w-auto lg:justify-end">
               <div className="w-full sm:w-72">
                 <label htmlFor="conso-vehicule" className="sr-only">Vehicule</label>
                 <SearchableVehiculeSelect
@@ -726,6 +1039,23 @@ export default function DashboardPage() {
                 {consoVehicule === "" && (
                   <p className="text-green-100 text-xs mt-1">Tous les vehicules</p>
                 )}
+              </div>
+              <div className="w-full sm:w-52">
+                <label htmlFor="conso-zone" className="sr-only">Zone</label>
+                <select
+                  id="conso-zone"
+                  value={consoZone}
+                  onChange={(event) => setConsoZone(event.target.value)}
+                  className="w-full px-4 py-2.5 border border-white/40 rounded-xl bg-white/95 text-gray-800 text-sm focus:ring-2 focus:ring-white outline-none transition-all"
+                >
+                  <option value="">Toutes les zones</option>
+                  {consoZoneOptions.map((zone) => (
+                    <option key={zone} value={zone}>{zone}</option>
+                  ))}
+                </select>
+                <p className="text-green-100 text-xs mt-1">
+                  {consoZone === "" ? "Toutes les zones" : `Zone : ${consoZone}`}
+                </p>
               </div>
               <div className="w-full sm:w-64" ref={monthDropdownRef}>
                 <span className="sr-only">Mois (selection multiple)</span>
@@ -791,6 +1121,16 @@ export default function DashboardPage() {
                     : "Selectionnez un ou plusieurs mois"}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={handleDownloadConsoPdf}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/95 text-green-700 font-medium text-sm hover:bg-white transition-colors shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                Telecharger PDF
+              </button>
             </div>
           </div>
 
