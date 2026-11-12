@@ -187,7 +187,7 @@ export const patchDemandeVehicule = async (req: Request, res: Response): Promise
       void Promise.all([
         notifyByRole('Admin',   'Tous les véhicules ravitaillés — demande prête pour validation', 'soumission_station', demandeId),
         notifyByRole('MENAGER', 'Tous les véhicules ravitaillés — demande prête pour validation', 'soumission_station', demandeId),
-      ])
+      ]).catch((err) => console.error('[notif véhicules ravitaillés]', err))
     }
 
     res.json(result.dv)
