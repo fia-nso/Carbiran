@@ -1,8 +1,7 @@
 import { Request, Response } from 'express'
 import { SignatureService } from '../services/signatureService'
-import { notifyByRoles, createNotification } from '../services/notificationService'
-import { AppDataSource } from '../config/database'
-import { User } from '../entities/User'
+import type { RoleANotifier } from '../services/signatureService'
+import { notifyByRoles, notifyByCircuitRole } from '../services/notificationService'
 import {
   deleteStoredAssetFile,
   resolveStoredSignatureFilename,
@@ -10,17 +9,6 @@ import {
 } from '../lib/storageAssets'
 
 const signatureService = new SignatureService()
-
-const CIRCUITS: Record<string, Record<string, string[]>> = {
-  situation: {
-    default: ['chef_departement', 'directeur_technique', 'chef_cellule', 'directeur_general', 'directrice_financiere'],
-    DC:      ['directeur_commercial', 'chef_cellule', 'directeur_general', 'directrice_financiere'],
-  },
-  bons: {
-    default: ['chef_departement', 'chef_cellule', 'directeur_general'],
-    DC:      ['directeur_commercial', 'chef_cellule', 'directeur_general'],
-  },
-}
 
 export const getSignatures = async (req: Request, res: Response): Promise<void> => {
   const demandeId = req.params['demandeId'] as string
@@ -43,37 +31,31 @@ export const getSignatureUtilisateur = async (req: Request, res: Response): Prom
   }
 }
 
-export const postSignature = async (req: Request, res: Response): Promise<void> => {
-  const { demande_id, role, ordre, circuit = 'situation', departement = '' } = req.body as {
-    demande_id?: string
-    role?: string
-    ordre?: number
-    circuit?: string
-    departement?: string
-  }
+export const postSignerDocuments = async (req: Request, res: Response): Promise<void> => {
+  const { demande_id } = req.body as { demande_id?: string }
 
-  if (!demande_id || !role || ordre == null) {
-    res.status(400).json({ error: 'Champs requis: demande_id, role, ordre' }); return
+  if (!demande_id) {
+    res.status(400).json({ error: 'Champ requis: demande_id' }); return
   }
 
   try {
-    const signatureUrl = await signatureService.findUserSignatureUrl(req.user!.sub)
-    if (!signatureUrl) {
-      res.status(400).json({ error: "Vous devez d'abord enregistrer votre signature." }); return
-    }
+    const { signatures, departement, aNotifier } = await signatureService.signerDocuments(demande_id, req.user!)
 
-    const sig = await signatureService.createSignature({
-      demande_id, role, user_id: req.user!.sub, signature_url: signatureUrl, ordre, circuit,
+    notifyNextSigners(demande_id, departement, aNotifier).catch((err) => {
+      console.error('[POST /signatures/signer] notifications', err)
     })
 
-    void notifyNextSigner(demande_id, ordre, circuit, departement)
-
-    res.status(201).json(serializeSignatureLike(req, sig))
+    res.status(signatures.length > 0 ? 201 : 200).json({
+      signatures: signatures.map((signature) => serializeSignatureLike(req, signature)),
+    })
   } catch (err: any) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      res.status(409).json({ error: 'Vous avez déjà signé ce document pour ce circuit' }); return
+    if (err.status) {
+      res.status(err.status).json({ error: err.message }); return
     }
-    console.error('[POST /signatures]', err)
+    if (err.code === 'ER_DUP_ENTRY') {
+      res.status(409).json({ error: 'Ce document a déjà été signé pour ce rôle.' }); return
+    }
+    console.error('[POST /signatures/signer]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }
 }
@@ -105,31 +87,21 @@ export const uploadSignatureHandler = async (req: Request, res: Response): Promi
   }
 }
 
-async function notifyNextSigner(
+async function notifyNextSigners(
   demandeId: string,
-  currentOrdre: number,
-  circuit: string,
-  departement: string
+  departement: string,
+  aNotifier: RoleANotifier[]
 ): Promise<void> {
-  const circuitKey = departement === 'DC' ? 'DC' : 'default'
-  const steps = CIRCUITS[circuit]?.[circuitKey] ?? []
-  const nextRole = steps[currentOrdre]
+  await Promise.all(
+    aNotifier.map(({ role, manquants }) => {
+      const documents = manquants.length === 2
+        ? 'la situation des dépenses et les bons de carburant'
+        : manquants[0] === 'bons' ? 'les bons de carburant' : 'la situation des dépenses'
+      const msg = `Votre signature est requise pour ${documents} — département ${departement}`
 
-  if (!nextRole) return
-
-  const label = circuit === 'bons' ? 'bons de carburant' : 'situation des dépenses'
-  const msg = `Votre signature est requise pour les ${label} — département ${departement} (étape ${currentOrdre + 1})`
-
-  if (nextRole === 'chef_cellule') {
-    await notifyByRoles(['Admin', 'MENAGER'], msg, 'signature', demandeId, departement)
-  } else {
-    const userRepo = AppDataSource.getRepository(User)
-    const nextUser = await userRepo.findOne({
-      where: { circuit_role: nextRole },
-      select: { id: true },
+      return role === 'chef_cellule'
+        ? notifyByRoles(['Admin', 'MENAGER'], msg, 'signature', demandeId, departement)
+        : notifyByCircuitRole(role, msg, 'signature', demandeId, departement)
     })
-    if (nextUser) {
-      await createNotification(nextUser.id, msg, 'signature', demandeId, departement)
-    }
-  }
+  )
 }

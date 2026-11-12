@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
+import { isAxiosError } from "axios";
 import { useParams, Link } from "react-router-dom";
 import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules } from "@/lib/api";
 import { useAuthContext } from "@/context/AuthProvider";
@@ -9,10 +10,8 @@ import {
   useSignatures,
   CIRCUIT_SITUATION,
   CIRCUIT_BONS,
-  CIRCUIT_SITUATION_DC,
-  CIRCUIT_BONS_DC,
   getCircuitRole,
-  getProchainSignataire,
+  getEtatSignature,
   hasAlreadySigned,
 } from "@/hooks/useSignatures";
 import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
@@ -210,8 +209,7 @@ export default function DetailDemandePage() {
     signaturesSituation,
     signaturesBons,
     fetchSignaturesSituation,
-    signerSituation,
-    signerBons,
+    signerDocuments,
   } = useSignatures();
 
   const [demande, setDemande] = useState<DemandeRavitaillement | null>(null);
@@ -223,10 +221,8 @@ export default function DetailDemandePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [ravForms, setRavForms] = useState<Record<string, RavForm>>({});
   const [successMap, setSuccessMap] = useState<Record<string, string>>({});
-  const [signingForSituation,   setSigningForSituation]   = useState(false);
-  const [signingForBons,        setSigningForBons]        = useState(false);
-  const [signErrorSituation,    setSignErrorSituation]    = useState<string | null>(null);
-  const [signErrorBons,         setSignErrorBons]         = useState<string | null>(null);
+  const [isSigning,             setIsSigning]             = useState(false);
+  const [signError,             setSignError]             = useState<string | null>(null);
   const [circuitSuccess,        setCircuitSuccess]        = useState<string | null>(null);
   const [isLoadingSignatures,   setIsLoadingSignatures]   = useState(true);
 
@@ -488,29 +484,21 @@ export default function DetailDemandePage() {
 
   const userCircuitRole = user ? getCircuitRole(user.role, user.circuit_role) : null;
 
-  async function handleSignerSituation(circuitRole: string, ordre: number) {
+  async function handleSignerDocuments() {
     if (!demande) return;
-    setSigningForSituation(true);
-    setSignErrorSituation(null);
+    setIsSigning(true);
+    setSignError(null);
     try {
-      await signerSituation(demande.id, circuitRole, ordre, demande.departement);
+      await signerDocuments(demande.id);
     } catch (e: unknown) {
-      setSignErrorSituation(e instanceof Error ? e.message : "Erreur lors de la signature.");
+      setSignError(
+        (isAxiosError<{ error?: string }>(e) && e.response?.data?.error) ||
+        (e instanceof Error ? e.message : "Erreur lors de la signature.")
+      );
+      // L'état affiché peut être périmé (un autre acteur vient de signer).
+      await fetchSignaturesSituation(demande.id).catch(() => undefined);
     } finally {
-      setSigningForSituation(false);
-    }
-  }
-
-  async function handleSignerBons(circuitRole: string, ordre: number) {
-    if (!demande) return;
-    setSigningForBons(true);
-    setSignErrorBons(null);
-    try {
-      await signerBons(demande.id, circuitRole, ordre, demande.departement);
-    } catch (e: unknown) {
-      setSignErrorBons(e instanceof Error ? e.message : "Erreur lors de la signature.");
-    } finally {
-      setSigningForBons(false);
+      setIsSigning(false);
     }
   }
 
@@ -1149,15 +1137,20 @@ export default function DetailDemandePage() {
       {(isCircuitActor || isChefDeCours) &&
        (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
         <>
+          <SignatureAction
+            demande={demande}
+            signatures={[...signaturesSituation, ...signaturesBons]}
+            userCircuitRole={userCircuitRole}
+            isLoadingSignatures={isLoadingSignatures}
+            isSigning={isSigning}
+            signError={signError}
+            onSigner={handleSignerDocuments}
+          />
           <SituationApercu
             demande={demande}
             vehiculesMap={vehiculesMap}
             signatures={signaturesSituation}
             userCircuitRole={userCircuitRole}
-            isSigning={signingForSituation}
-            signError={signErrorSituation}
-            onSigner={handleSignerSituation}
-            circuit={demande.departement === "DC" ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION}
             isLoadingSignatures={isLoadingSignatures}
           />
           <BonsApercu
@@ -1165,10 +1158,6 @@ export default function DetailDemandePage() {
             vehiculesMap={vehiculesMap}
             signatures={signaturesBons}
             userCircuitRole={userCircuitRole}
-            isSigning={signingForBons}
-            signError={signErrorBons}
-            onSigner={handleSignerBons}
-            circuit={demande.departement === "DC" ? CIRCUIT_BONS_DC : CIRCUIT_BONS}
             isLoadingSignatures={isLoadingSignatures}
           />
         </>
@@ -1457,6 +1446,74 @@ function SignaturesSection({ signaturesSituation, signaturesBons }: SignaturesSe
 }
 
 // ---------------------------------------------------------------------------
+// SignatureAction — bouton unique : signe tout ce qui reste à l'acteur
+// ---------------------------------------------------------------------------
+
+interface SignatureActionProps {
+  demande: DemandeRavitaillement;
+  signatures: SignatureSituation[];       // les deux circuits
+  userCircuitRole: string | null;
+  isLoadingSignatures: boolean;
+  isSigning: boolean;
+  signError: string | null;
+  onSigner: () => void;
+}
+
+function SignatureAction({
+  demande,
+  signatures,
+  userCircuitRole,
+  isLoadingSignatures,
+  isSigning,
+  signError,
+  onSigner,
+}: SignatureActionProps) {
+  if (isLoadingSignatures || demande.situation_soumise !== true || demande.statut === "annulee") return null;
+
+  const { manquants, peutSigner, attenteDe } = getEtatSignature(signatures, demande.departement, userCircuitRole);
+  if (manquants.length === 0 && !signError) return null;
+
+  const libelle =
+    manquants.length === 2
+      ? "Signer la situation et les bons"
+      : manquants[0] === "bons" ? "Signer les bons" : "Signer la situation";
+
+  return (
+    <div className="bg-white rounded-2xl shadow border border-gray-200 p-5 space-y-3">
+      {peutSigner && (
+        <>
+          <button
+            onClick={onSigner}
+            disabled={isSigning}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
+          >
+            {isSigning ? "Signature en cours…" : libelle}
+          </button>
+          <p className="text-xs text-center text-gray-400">
+            Pas encore de signature enregistrée ?{" "}
+            <Link to="/signature/upload" className="text-teal-600 hover:underline font-medium">
+              Enregistrer ma signature
+            </Link>
+          </p>
+        </>
+      )}
+
+      {!peutSigner && attenteDe.length > 0 && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-center">
+          En attente de la signature {attenteDe.map((label) => `du ${label}`).join(" et ")}
+        </p>
+      )}
+
+      {signError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          {signError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SituationApercu — vue en lecture pour les signataires
 // ---------------------------------------------------------------------------
 
@@ -1465,10 +1522,6 @@ interface SituationApercuProps {
   vehiculesMap: Record<number, VehiculeInfo>;
   signatures: SignatureSituation[];       // circuit='situation' uniquement
   userCircuitRole: string | null;
-  isSigning: boolean;
-  signError: string | null;
-  onSigner: (role: string, ordre: number) => void;
-  circuit: CircuitStep[];
   isLoadingSignatures: boolean;
 }
 
@@ -1477,10 +1530,6 @@ function SituationApercu({
   vehiculesMap,
   signatures,
   userCircuitRole,
-  isSigning,
-  signError,
-  onSigner,
-  circuit,
   isLoadingSignatures,
 }: SituationApercuProps) {
   const items      = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
@@ -1491,14 +1540,7 @@ function SituationApercu({
   const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
   const totalLitres  = items.reduce((sum, dv) => sum + (dv.n_liter  ?? 0), 0);
 
-  const prochainSituation = getProchainSignataire(signatures, circuit);
-  const alreadySigned     = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
-  const canSign           =
-    demande.situation_soumise === true &&
-    !alreadySigned &&
-    userCircuitRole !== null &&
-    circuit.some((s) => s.role === userCircuitRole) &&
-    prochainSituation?.role === userCircuitRole;
+  const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
 
   const sigBlocks = isDC
     ? [
@@ -1635,38 +1677,9 @@ function SituationApercu({
           </div>
         )}
 
-        {/* Bouton signer la situation — visible dès que c'est le tour de l'utilisateur */}
-        {canSign && (
-          <button
-            onClick={() => {
-              const step = circuit.find((s) => s.role === userCircuitRole);
-              if (step) onSigner(step.role, step.ordre);
-            }}
-            disabled={isSigning}
-            className="w-full min-h-[44px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-          >
-            {isSigning ? "Signature en cours…" : "Signer la situation"}
-          </button>
-        )}
-
-        {canSign && (
-          <p className="text-xs text-center text-gray-400">
-            Pas encore de signature enregistrée ?{" "}
-            <Link to="/signature/upload" className="text-teal-600 hover:underline font-medium">
-              Enregistrer ma signature
-            </Link>
-          </p>
-        )}
-
         {alreadySigned && (
           <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-center">
             Vous avez signé cette situation.
-          </p>
-        )}
-
-        {signError && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            {signError}
           </p>
         )}
       </div>
@@ -1683,10 +1696,6 @@ interface BonsApercuProps {
   vehiculesMap: Record<number, VehiculeInfo>;
   signatures: SignatureSituation[];       // circuit='bons' uniquement
   userCircuitRole: string | null;
-  isSigning: boolean;
-  signError: string | null;
-  onSigner: (role: string, ordre: number) => void;
-  circuit: CircuitStep[];
   isLoadingSignatures: boolean;
 }
 
@@ -1695,10 +1704,6 @@ function BonsApercu({
   vehiculesMap,
   signatures,
   userCircuitRole,
-  isSigning,
-  signError,
-  onSigner,
-  circuit,
   isLoadingSignatures,
 }: BonsApercuProps) {
   const items   = (demande.demande_vehicules ?? []).filter((dv) => dv.statut === "valide");
@@ -1724,14 +1729,7 @@ function BonsApercu({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemIds]);
 
-  const prochainBons  = getProchainSignataire(signatures, circuit);
   const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
-  const canSignBons   =
-    demande.situation_soumise === true &&
-    !alreadySigned &&
-    userCircuitRole !== null &&
-    circuit.some((s) => s.role === userCircuitRole) &&
-    prochainBons?.role === userCircuitRole;
 
   const bonSigBlocks = isDC
     ? [
@@ -1849,38 +1847,9 @@ function BonsApercu({
           })}
         </div>
 
-        {/* Bouton signer les bons — visible dès que c'est le tour de l'utilisateur */}
-        {canSignBons && (
-          <button
-            onClick={() => {
-              const step = circuit.find((s) => s.role === userCircuitRole);
-              if (step) onSigner(step.role, step.ordre);
-            }}
-            disabled={isSigning}
-            className="w-full min-h-[44px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
-          >
-            {isSigning ? "Signature en cours…" : "Signer les bons"}
-          </button>
-        )}
-
         {alreadySigned && (
           <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-center">
             Vous avez signé les bons.
-          </p>
-        )}
-
-        {canSignBons && (
-          <p className="text-xs text-center text-gray-400">
-            Pas encore de signature enregistrée ?{" "}
-            <Link to="/signature/upload" className="text-teal-600 hover:underline font-medium">
-              Enregistrer ma signature
-            </Link>
-          </p>
-        )}
-
-        {signError && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            {signError}
           </p>
         )}
       </div>

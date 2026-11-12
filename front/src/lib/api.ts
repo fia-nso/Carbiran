@@ -93,8 +93,8 @@ export const apiGetHistoriqueVehicules = (id: string) =>
 export const apiGetSignatures = (demandeId: string) =>
   api.get(`/signatures/${demandeId}`).then(r => r.data)
 
-export const apiSigner = (data: any) =>
-  api.post('/signatures', data).then(r => r.data)
+export const apiSignerDocuments = (demandeId: string) =>
+  api.post('/signatures/signer', { demande_id: demandeId }).then(r => r.data)
 
 export const apiGetSignatureUtilisateur = () =>
   api.get('/signatures/utilisateur/me').then(r => r.data)

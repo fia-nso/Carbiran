@@ -6,15 +6,10 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useWebNotifications } from "@/hooks/useWebNotifications";
 import {
   getCircuitRole,
-  CIRCUIT_SITUATION,
-  CIRCUIT_BONS,
-  CIRCUIT_SITUATION_DC,
-  CIRCUIT_BONS_DC,
+  getEtatSignature,
 } from "@/hooks/useSignatures";
-import type { CircuitStep } from "@/hooks/useSignatures";
 import type {
   DemandeRavitaillement,
-  DemandeSignatureLite,
   DemandeVehicule,
   User,
 } from "@/types";
@@ -84,12 +79,6 @@ function DvDetailLine({ dvs }: { dvs: DemandeVehicule[] | undefined }) {
 
 type MySignatureState = "signed" | "to_sign" | null;
 
-function circuitSignatures(sigs: DemandeSignatureLite[], type: "situation" | "bons") {
-  return type === "bons"
-    ? sigs.filter((s) => s.circuit === "bons")
-    : sigs.filter((s) => (s.circuit ?? "situation") !== "bons");
-}
-
 /**
  * Détermine, pour la demande donnée, si l'utilisateur connecté :
  *  - a déjà signé            → "signed"   (une entrée avec son user_id existe)
@@ -109,21 +98,10 @@ function getMySignatureState(demande: DemandeRavitaillement, user: User | null):
   const circuitActive = (demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide");
   if (!circuitActive) return signedByMe ? "signed" : null;
 
-  const isDC = demande.departement === "DC";
-  const circuits: { type: "situation" | "bons"; steps: CircuitStep[] }[] = [
-    { type: "situation", steps: isDC ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION },
-    { type: "bons",      steps: isDC ? CIRCUIT_BONS_DC : CIRCUIT_BONS },
-  ];
-
-  const isMyTurn = circuits.some(({ type, steps }) => {
-    const signedRoles = new Set(circuitSignatures(sigs, type).map((s) => s.role));
-    // Prochain signataire = première étape du circuit non encore signée.
-    const prochain = steps.find((step) => !signedRoles.has(step.role));
-    return prochain?.role === myRole;
-  });
-
-  if (isMyTurn) return "to_sign";
-  return signedByMe ? "signed" : null;
+  // Même règle que le bouton de signature de la page de détail.
+  const etat = getEtatSignature(sigs, demande.departement, myRole);
+  if (demande.situation_soumise === true && demande.statut !== "annulee" && etat.peutSigner) return "to_sign";
+  return signedByMe && etat.manquants.length === 0 ? "signed" : null;
 }
 
 function MySignatureBadge({ state }: { state: MySignatureState }) {

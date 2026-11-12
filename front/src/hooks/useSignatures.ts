@@ -3,7 +3,7 @@ import {
   apiGetSignatureUtilisateur,
   apiUploadSignature,
   apiGetSignatures,
-  apiSigner,
+  apiSignerDocuments,
 } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -74,11 +74,56 @@ export function hasAlreadySigned(signatures: SignatureSituation[], circuitRole: 
 }
 
 export function getProchainSignataire(
-  signatures: SignatureSituation[],
+  signatures: { role: string }[],
   circuit: CircuitStep[]
 ): CircuitStep | null {
   const signedRoles = new Set(signatures.map((s) => s.role));
   return circuit.find((step) => !signedRoles.has(step.role)) ?? null;
+}
+
+export type CircuitName = "situation" | "bons";
+
+export interface EtatSignature {
+  /** Circuits contenant le rôle et qu'il n'a pas encore signés. */
+  manquants: CircuitName[];
+  /** Vrai si le rôle est le prochain signataire de chacun de ses circuits manquants. */
+  peutSigner: boolean;
+  /** Libellés des acteurs qui doivent signer avant lui. */
+  attenteDe: string[];
+}
+
+/** Même règle que backend/src/lib/signatureCircuit.ts. */
+export function getEtatSignature(
+  signatures: { role: string; circuit?: string | null }[],
+  departement: string,
+  role: string | null
+): EtatSignature {
+  const isDC = departement === "DC";
+  const situation = isDC ? CIRCUIT_SITUATION_DC : CIRCUIT_SITUATION;
+  const circuits: { nom: CircuitName; steps: CircuitStep[] }[] = [
+    { nom: "situation", steps: situation },
+    { nom: "bons", steps: isDC ? CIRCUIT_BONS_DC : CIRCUIT_BONS },
+  ];
+
+  const manquants: CircuitName[] = [];
+  const attente = new Set<string>();
+
+  for (const { nom, steps } of circuits) {
+    if (!role || !steps.some((step) => step.role === role)) continue;
+
+    const signees = signatures.filter((s) => (s.circuit === "bons") === (nom === "bons"));
+    if (signees.some((s) => s.role === role)) continue;
+
+    manquants.push(nom);
+    const prochain = getProchainSignataire(signees, steps);
+    if (prochain && prochain.role !== role) attente.add(prochain.role);
+  }
+
+  return {
+    manquants,
+    peutSigner: manquants.length > 0 && attente.size === 0,
+    attenteDe: [...attente].map((r) => situation.find((step) => step.role === r)?.label ?? r),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -123,24 +168,12 @@ export function useSignatures() {
   }, []);
 
   // -------------------------------------------------------------------------
-  // signerSituation
+  // signerDocuments
   // -------------------------------------------------------------------------
 
-  const signerSituation = useCallback(
-    async (demandeId: string, role: string, ordre: number, departement = ""): Promise<void> => {
-      await apiSigner({ demande_id: demandeId, role, ordre, circuit: "situation", departement });
-      await fetchSignaturesSituation(demandeId);
-    },
-    [fetchSignaturesSituation]
-  );
-
-  // -------------------------------------------------------------------------
-  // signerBons
-  // -------------------------------------------------------------------------
-
-  const signerBons = useCallback(
-    async (demandeId: string, role: string, ordre: number, departement = ""): Promise<void> => {
-      await apiSigner({ demande_id: demandeId, role, ordre, circuit: "bons", departement });
+  const signerDocuments = useCallback(
+    async (demandeId: string): Promise<void> => {
+      await apiSignerDocuments(demandeId);
       await fetchSignaturesSituation(demandeId);
     },
     [fetchSignaturesSituation]
@@ -152,7 +185,6 @@ export function useSignatures() {
     fetchSignatureUtilisateur,
     uploadSignatureUtilisateur,
     fetchSignaturesSituation,
-    signerSituation,
-    signerBons,
+    signerDocuments,
   };
 }
