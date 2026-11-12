@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
 import { useAuthContext } from "@/context/AuthProvider";
+import { isReadOnlyUser } from "@/lib/roles";
 import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useVehicules } from "@/hooks/useVehicule";
@@ -152,6 +153,10 @@ function validateRavitaillementDraft(payload: RavitaillementDraft) {
   return errors;
 }
 
+// Départements = valeurs de vehicule.zone
+const DEPARTEMENTS = ["Zone A", "Zone B", "FO", "RX&SYS", "CPDE", "DC"] as const;
+const normalizeKey = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+
 export default function RavitaillementVehiculePage() {
   const { user } = useAuthContext();
   const {
@@ -168,13 +173,27 @@ export default function RavitaillementVehiculePage() {
   const [search, setSearch] = useState("");
   const [dateFilterFrom, setDateFilterFrom] = useState("");
   const [dateFilterTo, setDateFilterTo] = useState("");
+  const [departementFilter, setDepartementFilter] = useState("");
+  const [centreFilter, setCentreFilter] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRavitaillement, setEditingRavitaillement] = useState<RavitaillementVehicule | null>(null);
   const [form, setForm] = useState<RavitaillementFormState>(initialFormState);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const isDG     = user?.role === "signataire" && user?.circuit_role === "directeur_general";
-  const isViewer = user?.role === "viewer" || isDG;
+  // Lecture seule : viewer, DG, DT, DMG (cf. lib/roles.ts)
+  const isViewer = isReadOnlyUser(user);
+
+  // Centres disponibles pour le département choisi (issus de la liste des véhicules)
+  const centresDisponibles = useMemo(() => {
+    if (!departementFilter) return [];
+    const centres = new Set<string>();
+    for (const v of allVehicules) {
+      if (normalizeKey(v.zone) !== normalizeKey(departementFilter)) continue;
+      const centre = v.centre?.trim();
+      if (centre) centres.add(centre);
+    }
+    return [...centres].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [allVehicules, departementFilter]);
 
   const displayedRavitaillements = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -195,9 +214,14 @@ export default function RavitaillementVehiculePage() {
       const matchesDateFrom = !dateFilterFrom || (!!itemDate && itemDate >= dateFilterFrom);
       const matchesDateTo = !dateFilterTo || (!!itemDate && itemDate <= dateFilterTo);
 
-      return matchesSearch && matchesDateFrom && matchesDateTo;
+      const matchesDepartement =
+        !departementFilter || normalizeKey(item.vehicule?.zone) === normalizeKey(departementFilter);
+      const matchesCentre =
+        !centreFilter || normalizeKey(item.vehicule?.centre) === normalizeKey(centreFilter);
+
+      return matchesSearch && matchesDateFrom && matchesDateTo && matchesDepartement && matchesCentre;
     });
-  }, [dateFilterFrom, dateFilterTo, ravitaillements, search]);
+  }, [centreFilter, dateFilterFrom, dateFilterTo, departementFilter, ravitaillements, search]);
 
   const stats = {
     total: displayedRavitaillements.length,
@@ -208,9 +232,10 @@ export default function RavitaillementVehiculePage() {
     () => displayedRavitaillements.map((item) => item.id),
     [displayedRavitaillements]
   );
+  // Impression : uniquement les éléments sélectionnés ET visibles avec les filtres actuels
   const selectedRavitaillements = useMemo(
-    () => ravitaillements.filter((item) => selectedIds.includes(item.id)),
-    [ravitaillements, selectedIds]
+    () => displayedRavitaillements.filter((item) => selectedIds.includes(item.id)),
+    [displayedRavitaillements, selectedIds]
   );
   const isAllDisplayedSelected =
     displayedIds.length > 0 && displayedIds.every((id) => selectedIds.includes(id));
@@ -925,8 +950,8 @@ export default function RavitaillementVehiculePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            <div className="lg:col-span-2 relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="md:col-span-2 relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -937,27 +962,57 @@ export default function RavitaillementVehiculePage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Rechercher par vehicule, matricule, chauffeur, zone ou commentaire..."
-                className="pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 w-full bg-white shadow-sm"
+                className="pl-10 pr-4 h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 w-full bg-white shadow-sm"
               />
             </div>
+
+            <select
+              value={departementFilter}
+              onChange={(event) => {
+                setDepartementFilter(event.target.value);
+                setCentreFilter("");
+              }}
+              aria-label="Département"
+              className="px-4 h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white text-gray-700"
+            >
+              <option value="">Département</option>
+              {DEPARTEMENTS.map((dept) => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+
+            <select
+              value={centreFilter}
+              onChange={(event) => setCentreFilter(event.target.value)}
+              disabled={!departementFilter}
+              aria-label="Centre"
+              className="px-4 h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white text-gray-700 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              <option value="">{departementFilter ? "Tous les centres" : "Centre"}</option>
+              {centresDisponibles.map((centre) => (
+                <option key={centre} value={centre}>{centre}</option>
+              ))}
+            </select>
 
             <input
               type="date"
               value={dateFilterFrom}
               onChange={(event) => setDateFilterFrom(event.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+              aria-label="Date de début"
+              className="px-4 h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
             />
 
             <input
               type="date"
               value={dateFilterTo}
               onChange={(event) => setDateFilterTo(event.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+              aria-label="Date de fin"
+              className="px-4 h-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
             />
           </div>
 
           <p className="mt-4 text-sm text-gray-500">
-            Filtrez par intervalle de dates : de la premiere date jusqu'a la deuxieme.
+            Filtrez par département, centre et intervalle de dates : de la premiere date jusqu'a la deuxieme.
           </p>
 
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

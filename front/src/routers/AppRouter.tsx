@@ -20,6 +20,8 @@ import DetailDemandePage from "@/pages/Demandes/detailDemandePage";
 import ModifierDemandePage from "@/pages/Demandes/modifierDemandePage";
 import UploadSignaturePage from "@/pages/Signature/uploadSignaturePage";
 import BonVerificationPage from "@/pages/Public/bonVerificationPage";
+import type { User } from "@/types";
+import { homePathFor, isCellule, isDG, isDMG, isDT } from "@/lib/roles";
 
 // Redirige vers /dashboard pour Admin/MENAGER, vers /demandes pour tous les autres.
 function DefaultRedirect() {
@@ -35,14 +37,15 @@ function DefaultRedirect() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  if (user.role === "Admin" || user.role === "MENAGER") {
+  if (isCellule(user)) {
     return <Navigate to="/dashboard" replace />;
   }
-  return <Navigate to="/demandes" replace />;
+  return <Navigate to={homePathFor(user)} replace />;
 }
 
-// Autorise Admin, MENAGER et le DG (signataire dont l'email contient 'dg').
-function RequireAdminOrDG() {
+// Garde générique : laisse passer si allow(user) est vrai, sinon renvoie
+// vers la page d'accueil du rôle (/dashboard pour DMG, /demandes sinon).
+function RequireAccess({ allow }: { allow: (user: User) => boolean }) {
   const { user, loading } = useAuthContext();
 
   if (loading) {
@@ -54,14 +57,17 @@ function RequireAdminOrDG() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-
-  const isDG = user.role === "signataire" && user.circuit_role === "directeur_general";
-  if (user.role !== "Admin" && user.role !== "MENAGER" && !isDG) {
-    return <Navigate to="/demandes" replace />;
-  }
+  if (!allow(user)) return <Navigate to={homePathFor(user)} replace />;
 
   return <Outlet />;
 }
+
+// Cellule + DG (accès historiques) + DMG (lecture seule).
+const canSeeDashboardAndVehicules = (u: User) => isCellule(u) || isDG(u) || isDMG(u);
+// Idem + DT (lecture seule) pour les ravitaillements.
+const canSeeRavitaillements = (u: User) => canSeeDashboardAndVehicules(u) || isDT(u);
+// Tout le monde sauf DMG (pas de demandes, pas de signature).
+const notDMG = (u: User) => !isDMG(u);
 
 const AppRouter: React.FC = () => {
   return (
@@ -80,11 +86,15 @@ const AppRouter: React.FC = () => {
               {/* Redirection intelligente selon le rôle */}
               <Route index element={<DefaultRedirect />} />
 
-              {/* Admin, MENAGER et DG (lecture seule) */}
-              <Route element={<RequireAdminOrDG />}>
+              {/* Admin, MENAGER, DG et DMG (lecture seule pour DG/DMG) */}
+              <Route element={<RequireAccess allow={canSeeDashboardAndVehicules} />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
                 <Route path="/vehicules" element={<VehiculePage />} />
+              </Route>
+
+              {/* Idem + DT (lecture seule) */}
+              <Route element={<RequireAccess allow={canSeeRavitaillements} />}>
+                <Route path="/ravitaillements" element={<RavitaillementVehiculePage />} />
               </Route>
 
               {/* Admin uniquement */}
@@ -95,9 +105,13 @@ const AppRouter: React.FC = () => {
 
               {/* Tous les rôles authentifiés */}
               <Route path="/chpass" element={<ChangePasswordPage />} />
-              <Route path="/signature/upload" element={<UploadSignaturePage />} />
-              <Route path="/demandes" element={<DemandesPage />} />
-              <Route path="/demandes/:id" element={<DetailDemandePage />} />
+
+              {/* Tous les rôles sauf DMG */}
+              <Route element={<RequireAccess allow={notDMG} />}>
+                <Route path="/signature/upload" element={<UploadSignaturePage />} />
+                <Route path="/demandes" element={<DemandesPage />} />
+                <Route path="/demandes/:id" element={<DetailDemandePage />} />
+              </Route>
 
               {/* chef_de_cours et chef_departement */}
               <Route element={<RequireRole roles={["chef_de_cours", "chef_departement"]} />}>

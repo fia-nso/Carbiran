@@ -6,7 +6,8 @@ export type AppRole =
   | 'chef_departement'
   | 'responsable_station'
   | 'responsable_station_viewer'
-  | 'signataire';
+  | 'signataire'
+  | 'dmg';
 
 export type StatutDemande =
   | 'en_attente'

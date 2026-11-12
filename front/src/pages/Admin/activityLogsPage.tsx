@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useActivityLogs } from "@/hooks/useActivityLogs";
 import type { ActivityLog } from "@/types";
 
-type ModuleFilter = "ALL" | "auth" | "users" | "vehicules" | "ravitaillements";
+type ModuleFilter = "ALL" | "auth" | "users" | "vehicules" | "ravitaillements" | "demandes";
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -40,6 +40,8 @@ function getModuleLabel(module: string) {
       return "Vehicules";
     case "ravitaillements":
       return "Ravitaillements";
+    case "demandes":
+      return "Demandes";
     default:
       return module;
   }
@@ -63,6 +65,8 @@ function getActionLabel(action: string) {
       return "Deconnexion";
     case "UPDATE_PASSWORD":
       return "Changement de mot de passe";
+    case "REMOVE_VEHICULE":
+      return "Retrait de vehicule";
     default:
       return action;
   }
@@ -71,6 +75,7 @@ function getActionLabel(action: string) {
 function getActionTone(action: string) {
   switch (action) {
     case "DELETE":
+    case "REMOVE_VEHICULE":
       return "bg-red-100 text-red-800 border border-red-200";
     case "UPDATE":
     case "UPDATE_ROLE":
@@ -88,6 +93,13 @@ function getActionTone(action: string) {
 }
 
 function getTargetLabel(log: ActivityLog) {
+  if (log.action === "REMOVE_VEHICULE") {
+    const retire = asObject(asObject(log.metadata)?.vehicule_retire);
+    if (typeof retire?.matricule === "string" && retire.matricule.trim()) {
+      return retire.matricule;
+    }
+  }
+
   const beforeData = asObject(log.beforeData);
   const afterData = asObject(log.afterData);
   const source = afterData || beforeData;
@@ -285,6 +297,7 @@ export default function ActivityLogsPage() {
               <option value="users">Utilisateurs</option>
               <option value="vehicules">Vehicules</option>
               <option value="ravitaillements">Ravitaillements</option>
+              <option value="demandes">Demandes</option>
             </select>
           </div>
 

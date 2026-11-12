@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useAuthContext } from "@/context/AuthProvider";
+import { isReadOnlyUser } from "@/lib/roles";
 import { useVehicules } from "@/hooks/useVehicule";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import type { Vehicule } from "@/types";
@@ -59,8 +60,8 @@ export default function VehiculePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null);
   const [form, setForm] = useState<VehiculeFormState>(initialFormState);
-  const isDG     = user?.role === "signataire" && user?.circuit_role === "directeur_general";
-  const isViewer = user?.role === "viewer" || isDG;
+  // Lecture seule : viewer, DG, DT, DMG (cf. lib/roles.ts)
+  const isViewer = isReadOnlyUser(user);
 
   const stats = {
     total: vehicules.length,

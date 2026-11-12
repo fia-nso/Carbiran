@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import type { AppRole } from "@/types";
+import { homePathFor } from "@/lib/roles";
 
 interface RequireRoleProps {
   roles: AppRole[];
@@ -23,7 +24,7 @@ const RequireRole: React.FC<RequireRoleProps> = ({ roles }) => {
   }
 
   if (!roles.includes(user.role)) {
-    return <Navigate to="/demandes" replace />;
+    return <Navigate to={homePathFor(user)} replace />;
   }
 
   return <Outlet />;

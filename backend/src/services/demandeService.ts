@@ -4,6 +4,8 @@ import { Demande } from '../entities/Demande'
 import { DemandeVehicule } from '../entities/DemandeVehicule'
 import { Signature } from '../entities/Signature'
 import { SignatureUtilisateur } from '../entities/SignatureUtilisateur'
+import { Vehicule } from '../entities/Vehicule'
+import { LogService } from './logService'
 import type { AppRole } from '../types/index'
 import { evaluerConsommation } from './consommation'
 
@@ -223,7 +225,8 @@ export class DemandeService {
   async setAnnulee(
     id: string,
     role: AppRole,
-    userId: string
+    userId: string,
+    userDept: string | null
   ): Promise<{ demande: Demande; currentDepartement: string; currentCreatedBy: string } | null> {
     const current = await this.findRaw(id)
     if (!current) return null
@@ -232,6 +235,8 @@ export class DemandeService {
       role === 'Admin' ||
       role === 'MENAGER' ||
       (role === 'chef_departement' &&
+        !!userDept &&
+        current.departement === userDept &&
         ['en_attente', 'validee_dept'].includes(current.statut)) ||
       (current.created_by === userId && current.statut === 'en_attente')
 
@@ -250,37 +255,109 @@ export class DemandeService {
 
   async replaceVehicules(
     id: string,
-    vehicule_ids: number[],
-    role: AppRole,
-    userId: string
-  ): Promise<void> {
+    vehiculeIdsInput: number[],
+    user: { role: AppRole; userId: string; email: string; departement: string | null; circuitRole: string | null }
+  ): Promise<{ removed: number; added: number }> {
+    const { role, userId, departement: userDept, circuitRole } = user
+
+    const vehiculeIds = [...new Set(vehiculeIdsInput.map(Number))]
+    if (vehiculeIds.some((v) => !Number.isInteger(v) || v <= 0)) {
+      throw Object.assign(new Error('vehicule_ids invalides'), { status: 400 })
+    }
+    if (vehiculeIds.length === 0) {
+      throw Object.assign(new Error('La demande doit conserver au moins un véhicule.'), { status: 400 })
+    }
+
     const demande = await this.findRaw(id)
     if (!demande) throw Object.assign(new Error('Demande introuvable'), { status: 404 })
 
-    const canEdit =
-      role === 'Admin' ||
-      role === 'MENAGER' ||
-      (demande.created_by === userId && demande.statut === 'en_attente')
+    const isCellule = role === 'Admin' || role === 'MENAGER'
+    const isChefDept = role === 'chef_departement'
+    const isDirecteurCommercial = role === 'signataire' && circuitRole === 'directeur_commercial'
 
+    let canEdit = false
+    if (isCellule) {
+      canEdit = true
+    } else if (isChefDept) {
+      // Chef de département : uniquement son département, avant approbation.
+      canEdit = !!userDept && demande.departement === userDept && demande.statut === 'en_attente'
+    } else if (isDirecteurCommercial) {
+      canEdit = demande.departement === 'DC' && ['en_attente', 'validee_dept'].includes(demande.statut)
+    } else {
+      canEdit = demande.created_by === userId && demande.statut === 'en_attente'
+    }
     if (!canEdit) throw Object.assign(new Error('Modification non autorisée'), { status: 403 })
 
-    await AppDataSource.manager.transaction(async (em) => {
-      const existingDvs = await em.find(DemandeVehicule, { where: { demande_id: id } })
-      if (existingDvs.length > 0) {
-        await em.remove(DemandeVehicule, existingDvs)
+    const result = await AppDataSource.manager.transaction(async (em) => {
+      const existingDvs = await em.find(DemandeVehicule, {
+        where: { demande_id: id },
+        relations: { vehicule: true },
+      })
+
+      // Hors cellule : plus de modification dès qu'un véhicule est ravitaillé ou validé.
+      if (!isCellule && existingDvs.some((dv) => dv.statut === 'ravitaille' || dv.statut === 'valide')) {
+        throw Object.assign(
+          new Error('Modification impossible : des véhicules sont déjà ravitaillés ou validés.'),
+          { status: 409 }
+        )
       }
 
-      if (vehicule_ids.length > 0) {
-        const dvs = vehicule_ids.map((vid) =>
-          em.create(DemandeVehicule, {
-            demande_id: id,
-            vehicule_id: vid,
-            statut: 'en_attente',
-          })
+      const keep = new Set(vehiculeIds)
+      const existingIds = new Set(existingDvs.map((dv) => dv.vehicule_id))
+      const toRemove = existingDvs.filter((dv) => !keep.has(dv.vehicule_id))
+      const toAdd = vehiculeIds.filter((vid) => !existingIds.has(vid))
+
+      if (isChefDept && toAdd.length > 0) {
+        throw Object.assign(
+          new Error("Le chef de département peut uniquement retirer des véhicules de la demande."),
+          { status: 403 }
+        )
+      }
+
+      if (toRemove.length > 0) {
+        await em.remove(DemandeVehicule, toRemove)
+      }
+
+      if (toAdd.length > 0) {
+        const dvs = toAdd.map((vid) =>
+          em.create(DemandeVehicule, { demande_id: id, vehicule_id: vid, statut: 'en_attente' })
         )
         await em.save(DemandeVehicule, dvs)
       }
+
+      const afterVehicules = await em.find(Vehicule, { where: { id: In(vehiculeIds) } })
+      return { existingDvs, toRemove, toAdd, afterVehicules }
     })
+
+    // Journal : une entrée par véhicule retiré (hors transaction, ne bloque pas la modification).
+    if (result.toRemove.length > 0) {
+      const describe = (v: Vehicule | null | undefined, vid: number) =>
+        v ? { id: v.id, matricule: v.matricule, vehicule: v.vehicule } : { id: vid }
+      const avant = result.existingDvs.map((dv) => describe(dv.vehicule, dv.vehicule_id))
+      const apres = vehiculeIds.map((vid) => describe(result.afterVehicules.find((v) => v.id === vid), vid))
+      const logService = new LogService()
+
+      for (const dv of result.toRemove) {
+        const v = describe(dv.vehicule, dv.vehicule_id)
+        const label = 'matricule' in v ? `${v.matricule}` : `#${dv.vehicule_id}`
+        await logService
+          .create({
+            user_id: userId,
+            user_email: user.email,
+            module: 'demandes',
+            action: 'REMOVE_VEHICULE',
+            target_table: 'demande_vehicules',
+            target_id: dv.id,
+            description: `Retrait du véhicule ${label} de la demande ${demande.departement} (${demande.id}) par ${role}.`,
+            before_data: { demande_id: demande.id, statut: demande.statut, vehicules: avant },
+            after_data: { demande_id: demande.id, statut: demande.statut, vehicules: apres },
+            metadata: { departement: demande.departement, role, circuit_role: circuitRole, vehicule_retire: v, demande_vehicule: { id: dv.id, statut: dv.statut } },
+          })
+          .catch((err) => console.error('[log REMOVE_VEHICULE]', err))
+      }
+    }
+
+    return { removed: result.toRemove.length, added: result.toAdd.length }
   }
 
   async patchDemandeVehicule(

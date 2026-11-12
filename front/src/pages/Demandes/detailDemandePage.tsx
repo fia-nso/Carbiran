@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import { isAxiosError } from "axios";
 import { useParams, Link } from "react-router-dom";
-import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules } from "@/lib/api";
+import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules, apiReplaceDemandeVehicules } from "@/lib/api";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -225,6 +225,10 @@ export default function DetailDemandePage() {
   const [signError,             setSignError]             = useState<string | null>(null);
   const [circuitSuccess,        setCircuitSuccess]        = useState<string | null>(null);
   const [isLoadingSignatures,   setIsLoadingSignatures]   = useState(true);
+  // Chef de département (avant approbation) : lignes de véhicules décochées = à retirer
+  const [retraitIds,            setRetraitIds]            = useState<Set<string>>(new Set());
+  const [retraitError,          setRetraitError]          = useState<string | null>(null);
+  const [retraitSuccess,        setRetraitSuccess]        = useState<string | null>(null);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
@@ -332,6 +336,65 @@ export default function DetailDemandePage() {
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
+
+  // Purge la sélection de retrait des lignes qui n'existent plus (après rechargement)
+  const dvIdsKey = (demande?.demande_vehicules ?? []).map((dv) => dv.id).join(",");
+  useEffect(() => {
+    const existing = new Set(dvIdsKey ? dvIdsKey.split(",") : []);
+    setRetraitIds((prev) => {
+      const next = new Set([...prev].filter((dvId) => existing.has(dvId)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [dvIdsKey]);
+
+  function toggleRetrait(dvId: string) {
+    setRetraitError(null);
+    setRetraitSuccess(null);
+    setRetraitIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(dvId)) {
+        next.delete(dvId);
+        return next;
+      }
+      const total = demande?.demande_vehicules?.length ?? 0;
+      // Interdit de tout décocher : au moins un véhicule doit rester dans la demande.
+      if (total - next.size <= 1) {
+        setRetraitError("La demande doit conserver au moins un véhicule.");
+        return prev;
+      }
+      next.add(dvId);
+      return next;
+    });
+  }
+
+  async function handleRetirerVehicules() {
+    if (!demande || retraitIds.size === 0) return;
+    const dvs = demande.demande_vehicules ?? [];
+    const kept = dvs.filter((dv) => !retraitIds.has(dv.id)).map((dv) => dv.vehicule_id);
+    if (kept.length === 0) {
+      setRetraitError("La demande doit conserver au moins un véhicule.");
+      return;
+    }
+    const nbRetires = dvs.length - kept.length;
+    if (!window.confirm(`Retirer ${nbRetires} véhicule(s) de la demande ?`)) return;
+
+    setProcessing("retrait_vehicules");
+    setRetraitError(null);
+    setRetraitSuccess(null);
+    try {
+      await apiReplaceDemandeVehicules(demande.id, kept);
+      setRetraitIds(new Set());
+      setRetraitSuccess(`${nbRetires} véhicule(s) retiré(s) de la demande.`);
+      await fetchDemande(true);
+    } catch (err: unknown) {
+      const message = isAxiosError(err)
+        ? (err.response?.data as { error?: string } | undefined)?.error ?? err.message
+        : err instanceof Error ? err.message : "Erreur lors du retrait des véhicules.";
+      setRetraitError(message);
+    } finally {
+      setProcessing(null);
+    }
+  }
 
   async function handleValiderDept() {
     if (!demande) return;
@@ -953,12 +1016,13 @@ export default function DetailDemandePage() {
             </Link>
           )}
 
-          {/* chef_departement : valider + annuler + modifier */}
+          {/* chef_departement : valider + annuler (le retrait de véhicules se fait dans la liste ci-dessous) */}
           {isChefDept && demande.statut === "en_attente" && (
             <>
               <button
                 onClick={handleValiderDept}
-                disabled={processing === "valider_dept"}
+                disabled={processing === "valider_dept" || retraitIds.size > 0}
+                title={retraitIds.size > 0 ? "Retirez d'abord les véhicules décochés, ou recochez-les." : undefined}
                 className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
               >
                 {processing === "valider_dept" ? "Approbation…" : "Approuver la demande"}
@@ -972,20 +1036,6 @@ export default function DetailDemandePage() {
               </button>
             </>
           )}
-
-          {isChefDept &&
-            (demande.statut === "en_attente" || demande.statut === "validee_dept") &&
-            !demande.demande_vehicules?.some((dv) => dv.statut === "ravitaille" || dv.statut === "valide") && (
-              <Link
-                to={`/demandes/${id}/modifier`}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Modifier la demande
-              </Link>
-            )}
 
           {/* directeur_commercial : approuver + annuler + modifier (DC uniquement) */}
           {isDirecteurCommercial && demande.departement === "DC" && (
@@ -1095,6 +1145,67 @@ export default function DetailDemandePage() {
       {/* Rapport de consommation — Cellule uniquement, aide à juger avant soumission */}
       {isCellule && <RapportConsommationSection demandeId={demande.id} />}
 
+      {/* Chef de département, avant approbation : liste des véhicules avec retrait partiel */}
+      {isChefDept && demande.statut === "en_attente" && (
+        <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <p className="text-sm font-semibold text-gray-700">
+              Véhicules de la demande ({demande.demande_vehicules?.length ?? 0})
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Décochez les véhicules à retirer, puis cliquez sur « Retirer la sélection » avant d'approuver.
+              Au moins un véhicule doit rester dans la demande.
+            </p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {(demande.demande_vehicules ?? []).map((dv) => {
+              const info = vehiculesMap[dv.vehicule_id];
+              const garde = !retraitIds.has(dv.id);
+              return (
+                <label
+                  key={dv.id}
+                  className={`flex items-center gap-4 px-4 sm:px-6 min-h-[44px] py-3 cursor-pointer transition-colors ${
+                    garde ? "hover:bg-gray-50" : "bg-red-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={garde}
+                    onChange={() => toggleRetrait(dv.id)}
+                    disabled={processing === "retrait_vehicules"}
+                    className="w-5 h-5 rounded text-teal-600 border-gray-300 focus:ring-teal-500 flex-shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className={`font-medium truncate ${garde ? "text-gray-900" : "text-red-700 line-through"}`}>
+                      {info?.vehicule ?? `Véhicule #${dv.vehicule_id}`}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {info?.matricule ?? "—"}
+                      {info?.chauffeur_responsable ? ` · ${info.chauffeur_responsable}` : ""}
+                    </p>
+                  </div>
+                  {!garde && <span className="text-xs font-medium text-red-700 flex-shrink-0">À retirer</span>}
+                </label>
+              );
+            })}
+          </div>
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRetirerVehicules}
+              disabled={retraitIds.size === 0 || processing === "retrait_vehicules"}
+              className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {processing === "retrait_vehicules"
+                ? "Retrait…"
+                : `Retirer la sélection${retraitIds.size > 0 ? ` (${retraitIds.size})` : ""}`}
+            </button>
+            {retraitError && <p className="text-sm text-red-600">{retraitError}</p>}
+            {retraitSuccess && <p className="text-sm text-green-700">{retraitSuccess}</p>}
+          </div>
+        </div>
+      )}
+
       {/* Vehicles list — pour non-acteurs du circuit, pour cellule (actions), DG et directeur_commercial (lecture seule) */}
       {(!isCircuitActor || isCellule || isDG || isDirecteurCommercial) && (
         <div className="space-y-4">
@@ -1127,6 +1238,7 @@ export default function DetailDemandePage() {
 
       {/* Placeholder pour chef_dept / signataires non-DG en attente de validation */}
       {(isChefDept || (isSignataire && !isDG)) &&
+        !(isChefDept && demande.statut === "en_attente") &&
         !(demande.demande_vehicules ?? []).some((dv) => dv.statut === "valide") && (
         <div className="bg-white rounded-2xl shadow border border-gray-200 p-8 text-center text-gray-400 text-sm">
           Les aperçus seront disponibles après validation des ravitaillements par la cellule.

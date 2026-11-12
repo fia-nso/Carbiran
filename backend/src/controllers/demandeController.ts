@@ -128,10 +128,10 @@ export const patchDemande = async (req: Request, res: Response): Promise<void> =
 
 export const deleteDemande = async (req: Request, res: Response): Promise<void> => {
   const id = req.params['id'] as string
-  const { role, sub } = req.user!
+  const { role, sub, departement: userDept } = req.user!
 
   try {
-    const result = await demandeService.setAnnulee(id, role, sub)
+    const result = await demandeService.setAnnulee(id, role, sub, userDept)
     if (!result) { res.status(404).json({ error: 'Demande introuvable' }); return }
 
     void createNotification(
@@ -154,11 +154,17 @@ export const replaceDemandeVehicules = async (req: Request, res: Response): Prom
     res.status(400).json({ error: 'vehicule_ids (tableau) requis' }); return
   }
 
-  const { role, sub } = req.user!
+  const { role, sub, email, departement, circuit_role } = req.user!
 
   try {
-    await demandeService.replaceVehicules(id, vehicule_ids, role, sub)
-    res.json({ message: 'Véhicules mis à jour' })
+    const result = await demandeService.replaceVehicules(id, vehicule_ids, {
+      role,
+      userId: sub,
+      email,
+      departement,
+      circuitRole: circuit_role,
+    })
+    res.json({ message: 'Véhicules mis à jour', ...result })
   } catch (err: any) {
     res.status(err.status ?? 500).json({ error: err.message || 'Erreur serveur' })
   }

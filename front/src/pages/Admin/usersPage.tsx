@@ -369,10 +369,12 @@ export default function UsersPage() {
                               ? "bg-teal-100 text-teal-800 border border-teal-200"
                               : item.role === "viewer"
                               ? "bg-gray-100 text-gray-700 border border-gray-200"
+                              : item.role === "dmg"
+                              ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
                               : "bg-green-100 text-green-800 border border-green-200"
                           }`}
                         >
-                          {item.role}
+                          {item.role === "dmg" ? "DMG" : item.role}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-gray-700">{formatDateTime(item.createdAt)}</td>
@@ -565,6 +567,7 @@ export default function UsersPage() {
               >
                 <option value="viewer">viewer</option>
                 <option value="MENAGER">MENAGER</option>
+                <option value="dmg">DMG</option>
               </select>
             </div>
 
@@ -659,6 +662,7 @@ export default function UsersPage() {
                 >
                   <option value="viewer">viewer</option>
                   <option value="MENAGER">MENAGER</option>
+                  <option value="dmg">DMG</option>
                 </select>
               </div>
 

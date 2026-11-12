@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import NotificationBell from "@/components/NotificationBell";
 import { useWebNotifications } from "@/hooks/useWebNotifications";
+import { isDMG as isDMGUser, isDT as isDTUser } from "@/lib/roles";
 
 const NAV_LINK =
   "bg-white/15 px-4 py-2 rounded-lg hover:bg-white/25 transition-all duration-200 hover:shadow-lg border border-white/10 hover:border-white/20 font-medium text-white/90 hover:text-white text-sm";
@@ -24,6 +25,7 @@ function getRoleLabel(role: string, departement?: string | null, circuitRole?: s
   }
   if (role === "chef_departement")
     return departement ? `Chef Département ${departement}` : "Chef Département";
+  if (role === "dmg")                          return "DMG";
   return role;
 }
 
@@ -39,6 +41,8 @@ export default function Header() {
   useEffect(() => { if (isAdminOrManager) void requestPermission(); }, []);
   const isSignataire     = user?.role === "signataire";
   const isDG             = isSignataire && user?.circuit_role === "directeur_general";
+  const isDT             = isDTUser(user);
+  const isDMG            = isDMGUser(user);
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
   const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.circuit_role) : "";
 
@@ -90,9 +94,19 @@ export default function Header() {
                   <Link to="/signature/upload" className={NAV_LINK}>Ma signature</Link>
                   <Link to="/chpass"           className={NAV_LINK}>Changer mot de passe</Link>
                 </>
+              ) : isDMG ? (
+                <>
+                  <Link to="/dashboard"        className={NAV_LINK}>Dashboard</Link>
+                  <Link to="/vehicules"        className={NAV_LINK}>Véhicules</Link>
+                  <Link to="/ravitaillements"  className={NAV_LINK}>Ravitaillements</Link>
+                  <Link to="/chpass"           className={NAV_LINK}>Changer mot de passe</Link>
+                </>
               ) : isSignataire ? (
                 <>
                   <Link to="/demandes"          className={NAV_LINK}>Demandes</Link>
+                  {isDT && (
+                    <Link to="/ravitaillements" className={NAV_LINK}>Ravitaillements</Link>
+                  )}
                   <Link to="/signature/upload"  className={NAV_LINK}>Ma signature</Link>
                   <Link to="/chpass"            className={NAV_LINK}>Changer mot de passe</Link>
                 </>
@@ -110,7 +124,7 @@ export default function Header() {
               )}
             </nav>
 
-            <NotificationBell />
+            {!isDMG && <NotificationBell />}
 
             <div className="h-8 w-px bg-white/20 mx-1" />
 
@@ -134,7 +148,7 @@ export default function Header() {
 
           {/* Mobile : notification + hamburger */}
           <div className="flex lg:hidden items-center gap-2 flex-shrink-0">
-            <NotificationBell />
+            {!isDMG && <NotificationBell />}
             <button
               onClick={() => setMobileMenuOpen((prev) => !prev)}
               className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
@@ -191,9 +205,19 @@ export default function Header() {
               <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
               <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
+          ) : isDMG ? (
+            <>
+              <Link to="/dashboard"        className={MOBILE_NAV_LINK} onClick={closeMenu}>Dashboard</Link>
+              <Link to="/vehicules"        className={MOBILE_NAV_LINK} onClick={closeMenu}>Véhicules</Link>
+              <Link to="/ravitaillements"  className={MOBILE_NAV_LINK} onClick={closeMenu}>Ravitaillements</Link>
+              <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
+            </>
           ) : isSignataire ? (
             <>
               <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>
+              {isDT && (
+                <Link to="/ravitaillements" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ravitaillements</Link>
+              )}
               <Link to="/signature/upload" className={MOBILE_NAV_LINK} onClick={closeMenu}>Ma signature</Link>
               <Link to="/chpass"           className={MOBILE_NAV_LINK} onClick={closeMenu}>Changer mot de passe</Link>
             </>
