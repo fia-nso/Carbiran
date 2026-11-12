@@ -76,6 +76,7 @@ export const postDemande = async (req: Request, res: Response): Promise<void> =>
   try {
     const demande = await demandeService.create(departement, vehicule_ids, sub, statutInitial)
     void triggerCreationNotifications(role, departement, vehicule_ids.length, demande.id, userDept)
+      .catch((err) => console.error('[notif création demande]', err))
     res.status(201).json({ id: demande.id })
   } catch (err) {
     console.error('[POST /demandes]', err)
@@ -101,6 +102,7 @@ export const patchDemande = async (req: Request, res: Response): Promise<void> =
 
     if (statut) {
       void triggerStatusNotifications(statut, id, current.departement, current.created_by)
+        .catch((err) => console.error('[notif changement statut]', err))
     }
 
     if (situation_soumise) {
@@ -111,8 +113,10 @@ export const patchDemande = async (req: Request, res: Response): Promise<void> =
           select: { id: true },
         })
         if (dcUser) void createNotification(dcUser.id, msg, 'signature', id)
+          .catch((err) => console.error('[notif soumission situation DC]', err))
       } else {
         void notifyByRoleAndDept('chef_departement', current.departement, msg, 'signature', id)
+          .catch((err) => console.error('[notif soumission situation]', err))
       }
     }
 
@@ -135,7 +139,7 @@ export const deleteDemande = async (req: Request, res: Response): Promise<void> 
       `Votre demande ${result.currentDepartement} a été annulée.`,
       'annulation',
       id
-    )
+    ).catch((err) => console.error('[notif annulation]', err))
     res.status(204).send()
   } catch (err: any) {
     res.status(err.status ?? 500).json({ error: err.message || 'Erreur serveur' })
