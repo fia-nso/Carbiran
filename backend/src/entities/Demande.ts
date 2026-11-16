@@ -14,6 +14,10 @@ export class Demande {
   @Column({ type: 'varchar' })
   departement!: string
 
+  /** Centre de la demande, figé à la création. Anciennes demandes = NKTT. */
+  @Column({ type: 'varchar', default: 'NKTT' })
+  centre!: string
+
   @Column({ type: 'varchar', default: 'en_attente' })
   statut!: string
 

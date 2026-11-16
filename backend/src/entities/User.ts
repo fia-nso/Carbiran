@@ -26,6 +26,10 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   circuit_role!: string | null
 
+  /** Centre de rattachement (chef de centre, station). NULL pour les autres rôles. */
+  @Column({ type: 'varchar', nullable: true })
+  centre!: string | null
+
   @Column({ type: 'varchar', nullable: true })
   notification_email!: string | null
 

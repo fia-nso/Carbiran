@@ -28,6 +28,10 @@ export class Ravitaillement {
   @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
   n_liter!: string
 
+  /** Centre au moment du ravitaillement (photo, indépendante des mutations du véhicule). */
+  @Column({ type: 'varchar', nullable: true })
+  centre!: string | null
+
   @CreateDateColumn()
   created_at!: Date
 

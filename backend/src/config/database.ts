@@ -9,6 +9,7 @@ import { Notification } from '../entities/Notification'
 import { Signature } from '../entities/Signature'
 import { SignatureUtilisateur } from '../entities/SignatureUtilisateur'
 import { ActivityLog } from '../entities/ActivityLog'
+import { Centre } from '../entities/Centre'
 
 export const AppDataSource = new DataSource({
   type: 'mysql',
@@ -30,6 +31,7 @@ export const AppDataSource = new DataSource({
     Signature,
     SignatureUtilisateur,
     ActivityLog,
+    Centre,
   ],
   migrations: ['src/migrations/*.ts'],
 })
