@@ -1,7 +1,9 @@
 import { Request, Response } from 'express'
 import { VehiculeService } from '../services/vehiculeService'
+import { CentreService } from '../services/centreService'
 
 const vehiculeService = new VehiculeService()
+const centreService = new CentreService()
 
 export const getVehicules = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -33,12 +35,15 @@ export const createVehiculeHandler = async (req: Request, res: Response): Promis
   }
 
   try {
-    const v = await vehiculeService.create({ vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre })
+    // Le centre, s'il est renseigné, doit exister dans la table centres (code normalisé en majuscules).
+    const centreCode = await centreService.verifierCode(centre)
+    const v = await vehiculeService.create({ vehicule, matricule, utilisation_affectation, chauffeur_responsable, zone, centre: centreCode })
     res.status(201).json(v)
   } catch (err: any) {
     if (err.code === 'ER_DUP_ENTRY') {
       res.status(409).json({ error: 'Ce matricule existe déjà' }); return
     }
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[POST /vehicules]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }
@@ -55,13 +60,14 @@ export const updateVehiculeHandler = async (req: Request, res: Response): Promis
   if (utilisation_affectation !== undefined) fields['utilisation_affectation'] = utilisation_affectation?.trim()
   if ('chauffeur_responsable' in req.body) fields['chauffeur_responsable'] = chauffeur_responsable ?? null
   if (zone !== undefined) fields['zone'] = zone?.trim()
-  if ('centre' in req.body) fields['centre'] = centre ?? null
 
-  if (Object.keys(fields).length === 0) {
+  if (Object.keys(fields).length === 0 && !('centre' in req.body)) {
     res.status(400).json({ error: 'Aucune modification fournie' }); return
   }
 
   try {
+    // Le centre, s'il est renseigné, doit exister dans la table centres (code normalisé en majuscules).
+    if ('centre' in req.body) fields['centre'] = await centreService.verifierCode(centre)
     const v = await vehiculeService.update(id, fields as any)
     if (!v) { res.status(404).json({ error: 'Véhicule introuvable' }); return }
     res.json(v)
@@ -69,6 +75,7 @@ export const updateVehiculeHandler = async (req: Request, res: Response): Promis
     if (err.code === 'ER_DUP_ENTRY') {
       res.status(409).json({ error: 'Ce matricule existe déjà' }); return
     }
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[PATCH /vehicules/:id]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }

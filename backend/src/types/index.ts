@@ -25,6 +25,8 @@ export interface JwtPayload {
   role: AppRole;
   departement: string | null;
   circuit_role: string | null;
+  /** Centre au moment de l'émission du jeton — informatif. Pour un contrôle, lire en base (lib/userCentre.ts). */
+  centre?: string | null;
 }
 
 // Augmente le namespace Express pour que req.user soit disponible dans toutes les routes

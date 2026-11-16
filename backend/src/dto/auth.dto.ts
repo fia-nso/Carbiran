@@ -38,6 +38,10 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
+  centre?: string
+
+  @IsOptional()
+  @IsString()
   notification_email?: string
 }
 

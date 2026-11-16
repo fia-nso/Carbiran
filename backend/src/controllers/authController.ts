@@ -58,19 +58,20 @@ export const getUsers = async (_req: Request, res: Response): Promise<void> => {
 }
 
 export const createUserHandler = async (req: Request, res: Response): Promise<void> => {
-  const { email, password, nom, prenom, role, departement, circuit_role, notification_email } =
+  const { email, password, nom, prenom, role, departement, circuit_role, centre, notification_email } =
     req.body as Record<string, string | undefined>
 
   if (!email || !password || !role) {
     res.status(400).json({ error: 'Email, mot de passe et rôle requis' }); return
   }
   try {
-    const user = await authService.create({ email, password, role, nom, prenom, departement, circuit_role, notification_email })
+    const user = await authService.create({ email, password, role, nom, prenom, departement, circuit_role, centre, notification_email })
     res.status(201).json(user)
   } catch (err: any) {
     if (err.code === 'ER_DUP_ENTRY') {
       res.status(409).json({ error: 'Cet email est déjà utilisé' }); return
     }
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[POST /auth/users]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }
@@ -88,6 +89,7 @@ export const updateUserHandler = async (req: Request, res: Response): Promise<vo
     if (role !== undefined) fields['role'] = role
     if ('departement' in req.body) fields['departement'] = departement ?? null
     if ('circuit_role' in req.body) fields['circuit_role'] = circuit_role ?? null
+    if ('centre' in req.body) fields['centre'] = req.body.centre ?? null
     if ('notification_email' in req.body) fields['notification_email'] = notification_email ?? null
     if (password) {
       const bcrypt = await import('bcryptjs')
@@ -101,7 +103,8 @@ export const updateUserHandler = async (req: Request, res: Response): Promise<vo
     const user = await authService.update(id, fields as any)
     if (!user) { res.status(404).json({ error: 'Utilisateur introuvable' }); return }
     res.json(user)
-  } catch (err) {
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[PATCH /auth/users/:id]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }

@@ -15,6 +15,7 @@ import signaturesRoutes     from './routes/signatures'
 import notificationsRoutes  from './routes/notifications'
 import storageRoutes        from './routes/storage'
 import logsRoutes           from './routes/logs'
+import centresRoutes        from './routes/centres'
 
 const app = express()
 const PORT         = process.env.PORT         || 3000
@@ -65,6 +66,7 @@ app.use('/api/signatures',      signaturesRoutes)
 app.use('/api/notifications',   notificationsRoutes)
 app.use('/api/storage',         storageRoutes)
 app.use('/api/logs',            logsRoutes)
+app.use('/api/centres',         centresRoutes)
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
