@@ -23,8 +23,14 @@ function httpError(status: number, message: string): Error {
  * - s'il est renseigné, doit exister dans `centres` et être actif.
  * Retourne le code normalisé (majuscules) ou null.
  */
-async function validerCentreUtilisateur(role: string, centre: unknown): Promise<string | null> {
-  const code = await centreService.verifierCode(centre, { actifRequis: true })
+async function validerCentreUtilisateur(
+  role: string,
+  centre: unknown,
+  centreActuel: string | null = null
+): Promise<string | null> {
+  // Un centre inchangé (même désactivé depuis) reste accepté : la désactivation ne bloque pas ses utilisateurs.
+  const inchange = centreActuel !== null && typeof centre === 'string' && centre.trim().toUpperCase() === centreActuel
+  const code = await centreService.verifierCode(centre, { actifRequis: !inchange })
   if (!code && roleExigeCentre(role)) {
     throw httpError(400, `Centre obligatoire pour le rôle ${role}`)
   }
@@ -123,7 +129,7 @@ export class AuthService {
       if (!actuel) return null
       const role = fields.role ?? actuel.role
       const centre = 'centre' in fields ? fields.centre : actuel.centre
-      fields = { ...fields, centre: await validerCentreUtilisateur(role, centre) }
+      fields = { ...fields, centre: await validerCentreUtilisateur(role, centre, actuel.centre) }
     }
     await repo().update(id, fields)
     return repo().findOne({

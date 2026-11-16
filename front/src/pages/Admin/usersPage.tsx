@@ -3,10 +3,70 @@ import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useUsers } from "@/hooks/useUsers";
 import { useAuthContext } from "@/context/AuthProvider";
-import { apiUpdateUser } from "@/lib/api";
-import type { AppRole } from "@/types";
+import { useCentres } from "@/hooks/useCentres";
+import { apiErrorMessage, apiUpdateUser } from "@/lib/api";
+import { roleExigeCentre } from "@/lib/roles";
+import type { AppRole, Centre } from "@/types";
 
 type ManagedRole = Exclude<AppRole, "Admin">;
+
+/** Rôles proposés à la création (ceux qui ne demandent pas de département ni de rôle de circuit). */
+const CREATABLE_ROLES: { value: ManagedRole; label: string }[] = [
+  { value: "viewer", label: "viewer" },
+  { value: "MENAGER", label: "MENAGER" },
+  { value: "dmg", label: "DMG" },
+  { value: "chef_de_cours", label: "Chef de centre" },
+  { value: "responsable_station", label: "Superviseur/Station" },
+];
+
+const ROLE_LABELS: Partial<Record<AppRole, string>> = {
+  dmg: "DMG",
+  chef_de_cours: "Chef de centre",
+  responsable_station: "Superviseur/Station",
+  responsable_station_viewer: "Chef Département Achat",
+  chef_departement: "Chef Département",
+};
+
+const SELECT_CLASS =
+  "w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white";
+
+/** Liste déroulante des centres actifs (+ le centre actuel s'il a été désactivé). */
+function CentreSelect({
+  id,
+  value,
+  onChange,
+  role,
+  centres,
+  centreActuel,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  role: string;
+  centres: Centre[];
+  centreActuel?: string | null;
+}) {
+  const obligatoire = roleExigeCentre(role);
+  const options = centres.filter((c) => c.actif || c.code === centreActuel);
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">
+        Centre {obligatoire ? <span className="text-red-600">*</span> : <span className="text-gray-400">(facultatif)</span>}
+      </label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={SELECT_CLASS}>
+        <option value="">{obligatoire ? "— Choisir un centre —" : "Aucun centre"}</option>
+        {options.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.code} — {c.nom} ({c.zone}){c.actif ? "" : " — inactif"}
+          </option>
+        ))}
+      </select>
+      {obligatoire && (
+        <p className="text-xs text-gray-500 mt-1">Obligatoire pour un chef de centre ou une station.</p>
+      )}
+    </div>
+  );
+}
 
 interface UserFormState {
   email: string;
@@ -14,6 +74,7 @@ interface UserFormState {
   nom: string;
   prenom: string;
   role: ManagedRole;
+  centre: string;
 }
 
 interface EditUserFormState {
@@ -22,6 +83,8 @@ interface EditUserFormState {
   nom: string;
   prenom: string;
   role: ManagedRole;
+  centre: string;
+  centreInitial: string | null;
 }
 
 const initialFormState: UserFormState = {
@@ -30,6 +93,7 @@ const initialFormState: UserFormState = {
   nom: "",
   prenom: "",
   role: "viewer",
+  centre: "",
 };
 
 function formatDateTime(value: string) {
@@ -51,6 +115,7 @@ export default function UsersPage() {
     deleteManagedUser,
   } = useUsers();
   const { user: currentUser } = useAuthContext();
+  const { centres } = useCentres(false);
 
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -78,6 +143,7 @@ export default function UsersPage() {
         item.nom || "",
         item.prenom || "",
         item.role,
+        item.centre || "",
       ].some((value) => value.toLowerCase().includes(normalizedSearch));
     });
   }, [search, users]);
@@ -103,6 +169,7 @@ export default function UsersPage() {
     nom: string | null;
     prenom: string | null;
     role: AppRole;
+    centre: string | null;
   }) {
     if (item.role === "Admin") {
       return;
@@ -114,6 +181,8 @@ export default function UsersPage() {
       nom: item.nom || "",
       prenom: item.prenom || "",
       role: item.role,
+      centre: item.centre || "",
+      centreInitial: item.centre,
     });
     setIsEditModalOpen(true);
   }
@@ -131,6 +200,11 @@ export default function UsersPage() {
       return;
     }
 
+    if (roleExigeCentre(form.role) && !form.centre) {
+      alert("Le centre est obligatoire pour un chef de centre ou une station.");
+      return;
+    }
+
     try {
       const result = await createManagedUser({
         email: form.email,
@@ -138,6 +212,7 @@ export default function UsersPage() {
         nom: form.nom,
         prenom: form.prenom,
         role: form.role,
+        centre: form.centre || null,
       });
 
       setForm(initialFormState);
@@ -150,7 +225,7 @@ export default function UsersPage() {
       }
     } catch (error: any) {
       console.error(error);
-      alert(error?.message ?? "Erreur lors de la creation du compte.");
+      alert(apiErrorMessage(error, "Erreur lors de la creation du compte."));
     }
   }
 
@@ -160,7 +235,7 @@ export default function UsersPage() {
       await updateUserRole(id, role);
     } catch (error: any) {
       console.error(error);
-      alert(error?.message ?? "Erreur lors de la mise a jour du role.");
+      alert(apiErrorMessage(error, "Erreur lors de la mise a jour du role."));
     } finally {
       setActionUserId(null);
     }
@@ -173,18 +248,24 @@ export default function UsersPage() {
       return;
     }
 
+    if (roleExigeCentre(editForm.role) && !editForm.centre) {
+      alert("Le centre est obligatoire pour un chef de centre ou une station.");
+      return;
+    }
+
     try {
       await updateManagedUser({
         id: editForm.id,
         nom: editForm.nom,
         prenom: editForm.prenom,
         role: editForm.role,
+        centre: editForm.centre || null,
       });
       setIsEditModalOpen(false);
       setEditForm(null);
     } catch (error: any) {
       console.error(error);
-      alert(error?.message ?? "Erreur lors de la modification du user.");
+      alert(apiErrorMessage(error, "Erreur lors de la modification du user."));
     }
   }
 
@@ -252,7 +333,7 @@ export default function UsersPage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Gestion des users</h1>
                 <p className="text-gray-600 mt-1">
-                  Creez des comptes MENAGER et viewer. Cette page est reservee a l'admin.
+                  Creez et modifiez les comptes (MENAGER, viewer, DMG, chef de centre, station). Cette page est reservee a l'admin.
                 </p>
               </div>
             </div>
@@ -323,6 +404,9 @@ export default function UsersPage() {
                     Role
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
+                    Centre
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-green-800 uppercase tracking-wider">
                     Cree le
                   </th>
                   <th className="px-6 py-4 text-center text-sm font-semibold text-green-800 uppercase tracking-wider">
@@ -333,7 +417,7 @@ export default function UsersPage() {
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
+                    <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="flex justify-center items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                         <span className="ml-3 text-gray-600">Chargement des users...</span>
@@ -342,7 +426,7 @@ export default function UsersPage() {
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
+                    <td colSpan={6} className="px-6 py-12 text-center">
                       <div className="text-center">
                         <h3 className="text-lg font-medium text-gray-900">Aucun user</h3>
                         <p className="mt-1 text-gray-500">
@@ -374,8 +458,22 @@ export default function UsersPage() {
                               : "bg-green-100 text-green-800 border border-green-200"
                           }`}
                         >
-                          {item.role === "dmg" ? "DMG" : item.role}
+                          {ROLE_LABELS[item.role] ?? item.role}
                         </span>
+                        {item.departement && (
+                          <div className="text-xs text-gray-500 mt-1">{item.departement}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {item.centre ? (
+                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold font-mono bg-teal-50 text-teal-800 border border-teal-200">
+                            {item.centre}
+                          </span>
+                        ) : roleExigeCentre(item.role) ? (
+                          <span className="text-xs font-medium text-red-600">Centre manquant</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-gray-700">{formatDateTime(item.createdAt)}</td>
                       <td className="px-6 py-4">
@@ -462,7 +560,7 @@ export default function UsersPage() {
                   type="password"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                   placeholder="Minimum 6 caractères"
                   autoFocus
                 />
@@ -505,7 +603,7 @@ export default function UsersPage() {
                 type="email"
                 value={form.email}
                 onChange={(event) => updateForm("email", event.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                 placeholder="exemple@domaine.com"
                 autoFocus
               />
@@ -520,7 +618,7 @@ export default function UsersPage() {
                 type="password"
                 value={form.password}
                 onChange={(event) => updateForm("password", event.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                 placeholder="Au moins 6 caracteres"
               />
             </div>
@@ -535,7 +633,7 @@ export default function UsersPage() {
                   type="text"
                   value={form.nom}
                   onChange={(event) => updateForm("nom", event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                  className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                   placeholder="Optionnel"
                 />
               </div>
@@ -549,7 +647,7 @@ export default function UsersPage() {
                   type="text"
                   value={form.prenom}
                   onChange={(event) => updateForm("prenom", event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                  className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                   placeholder="Optionnel"
                 />
               </div>
@@ -563,13 +661,21 @@ export default function UsersPage() {
                 id="user-role"
                 value={form.role}
                 onChange={(event) => updateForm("role", event.target.value as ManagedRole)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+                className={SELECT_CLASS}
               >
-                <option value="viewer">viewer</option>
-                <option value="MENAGER">MENAGER</option>
-                <option value="dmg">DMG</option>
+                {CREATABLE_ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
               </select>
             </div>
+
+            <CentreSelect
+              id="user-centre"
+              value={form.centre}
+              onChange={(v) => updateForm("centre", v)}
+              role={form.role}
+              centres={centres}
+            />
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
               Creation depuis le navigateur avec role applicatif immediat.
@@ -610,7 +716,7 @@ export default function UsersPage() {
                   type="email"
                   value={editForm.email}
                   disabled
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
+                  className="w-full h-12 px-4 border border-gray-200 rounded-xl bg-gray-50 text-gray-500"
                 />
               </div>
 
@@ -626,7 +732,7 @@ export default function UsersPage() {
                     onChange={(event) =>
                       setEditForm((prev) => (prev ? { ...prev, nom: event.target.value } : prev))
                     }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                    className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                   />
                 </div>
 
@@ -641,7 +747,7 @@ export default function UsersPage() {
                     onChange={(event) =>
                       setEditForm((prev) => (prev ? { ...prev, prenom: event.target.value } : prev))
                     }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
+                    className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
                   />
                 </div>
               </div>
@@ -658,13 +764,25 @@ export default function UsersPage() {
                       prev ? { ...prev, role: event.target.value as ManagedRole } : prev
                     )
                   }
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+                  className={SELECT_CLASS}
                 >
-                  <option value="viewer">viewer</option>
-                  <option value="MENAGER">MENAGER</option>
-                  <option value="dmg">DMG</option>
+                  {CREATABLE_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                  {!CREATABLE_ROLES.some((r) => r.value === editForm.role) && (
+                    <option value={editForm.role}>{ROLE_LABELS[editForm.role] ?? editForm.role}</option>
+                  )}
                 </select>
               </div>
+
+              <CentreSelect
+                id="edit-user-centre"
+                value={editForm.centre}
+                onChange={(v) => setEditForm((prev) => (prev ? { ...prev, centre: v } : prev))}
+                role={editForm.role}
+                centres={centres}
+                centreActuel={editForm.centreInitial}
+              />
 
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button

@@ -57,8 +57,14 @@ export function useDemandes() {
   // -------------------------------------------------------------------------
 
   const createDemande = useCallback(
-    async (departement: string, vehiculeIds: number[], _role?: string) => {
-      const { id } = await apiCreateDemande({ departement, vehicule_ids: vehiculeIds });
+    // `centre` n'est envoyé que par le chef de département : pour le chef de centre,
+    // le backend prend toujours le centre de son compte (lu en base).
+    async (departement: string, vehiculeIds: number[], centre?: string | null) => {
+      const { id } = await apiCreateDemande({
+        departement,
+        vehicule_ids: vehiculeIds,
+        ...(centre ? { centre } : {}),
+      });
       await fetchDemandes();
       return id as string;
     },

@@ -9,6 +9,8 @@ export interface ManagedUser {
   nom: string | null;
   prenom: string | null;
   role: AppRole;
+  departement: string | null;
+  centre: string | null;
   createdAt: string;
 }
 
@@ -18,6 +20,7 @@ interface CreateManagedUserPayload {
   nom?: string;
   prenom?: string;
   role: Exclude<AppRole, "Admin">;
+  centre?: string | null;
 }
 
 interface UpdateManagedUserPayload {
@@ -25,6 +28,7 @@ interface UpdateManagedUserPayload {
   nom?: string;
   prenom?: string;
   role: Exclude<AppRole, "Admin">;
+  centre?: string | null;
 }
 
 export function useUsers() {
@@ -47,6 +51,8 @@ export function useUsers() {
           nom: item.nom,
           prenom: item.prenom,
           role: item.role,
+          departement: item.departement ?? null,
+          centre: item.centre ?? null,
           createdAt: item.created_at,
         }))
       );
@@ -68,6 +74,7 @@ export function useUsers() {
         nom: payload.nom?.trim() || null,
         prenom: payload.prenom?.trim() || null,
         role: payload.role,
+        centre: payload.centre || null,
       });
 
       await loadUsers();
@@ -109,6 +116,7 @@ export function useUsers() {
       nom:   payload.nom?.trim()    || null,
       prenom: payload.prenom?.trim() || null,
       role:  payload.role,
+      centre: payload.centre || null,
     });
 
     await writeActivityLogSafe({
@@ -118,7 +126,7 @@ export function useUsers() {
       targetId: payload.id,
       description: `Modification du user ${previousUser?.email || payload.id}.`,
       beforeData: previousUser,
-      afterData: { ...previousUser, nom: payload.nom, prenom: payload.prenom, role: payload.role },
+      afterData: { ...previousUser, nom: payload.nom, prenom: payload.prenom, role: payload.role, centre: payload.centre || null },
     });
 
     await loadUsers();

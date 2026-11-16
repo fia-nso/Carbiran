@@ -138,6 +138,23 @@ export const apiGetLogs = () =>
 export const apiWriteLog = (data: any) =>
   api.post('/logs', data).then(r => r.data)
 
+// Centres (lecture : tout utilisateur connecté ; écriture : Admin)
+export const apiGetCentres = (actifsSeulement = false) =>
+  api.get('/centres', { params: actifsSeulement ? { actifs: 1 } : undefined }).then(r => r.data)
+
+export const apiCreateCentre = (data: { code: string; nom: string; zone: string; actif?: boolean }) =>
+  api.post('/centres', data).then(r => r.data)
+
+/** Le code n'est jamais modifiable. */
+export const apiUpdateCentre = (code: string, data: { nom?: string; zone?: string; actif?: boolean }) =>
+  api.patch(`/centres/${encodeURIComponent(code)}`, data).then(r => r.data)
+
+/** Message d'erreur lisible : celui renvoyé par l'API, sinon celui d'axios. */
+export const apiErrorMessage = (err: unknown, fallback = 'Erreur serveur'): string => {
+  const e = err as { response?: { data?: { error?: string } }; message?: string }
+  return e?.response?.data?.error ?? e?.message ?? fallback
+}
+
 // Bon vérification (public)
 export const apiGetBon = (dvId: string) =>
   api.get(`/demandes/bons/${dvId}`).then(r => r.data)

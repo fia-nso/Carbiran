@@ -13,6 +13,7 @@ import VehiculePage from "@/pages/Crud/vehiculePage";
 import RavitaillementVehiculePage from "@/pages/Crud/ravitaillementVehiculePage";
 import UsersPage from "@/pages/Admin/usersPage";
 import ActivityLogsPage from "@/pages/Admin/activityLogsPage";
+import CentresPage from "@/pages/Admin/centresPage";
 import DashboardPage from "@/pages/Dashboard/dashboardPage";
 import DemandesPage from "@/pages/Demandes/demandesPage";
 import NouvelleDemandePage from "@/pages/Demandes/nouvelleDemandePage";
@@ -101,6 +102,7 @@ const AppRouter: React.FC = () => {
               <Route element={<RequireRole roles={["Admin"]} />}>
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/logs" element={<ActivityLogsPage />} />
+                <Route path="/centres" element={<CentresPage />} />
               </Route>
 
               {/* Tous les rôles authentifiés */}

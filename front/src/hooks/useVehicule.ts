@@ -125,10 +125,6 @@ export function useVehicules() {
 
   const normalizedSearch = search.trim().toLowerCase();
 
-  const centresDisponibles = Array.from(
-    new Set(vehicules.map((v) => v.centre).filter((c): c is string => Boolean(c)))
-  ).sort();
-
   const vehiculesFiltres = vehicules.filter((item) => {
     const matchSearch = !normalizedSearch || [
       item.vehicule,
@@ -151,7 +147,6 @@ export function useVehicules() {
     setSearch,
     centreFilter,
     setCentreFilter,
-    centresDisponibles,
     addVehicule,
     updateVehicule,
     deleteVehicule,

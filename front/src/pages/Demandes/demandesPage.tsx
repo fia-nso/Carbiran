@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useWebNotifications } from "@/hooks/useWebNotifications";
+import { normCentre, useCentres } from "@/hooks/useCentres";
 import {
   getCircuitRole,
   getEtatSignature,
@@ -31,6 +32,15 @@ function getDvStats(dvs: DemandeVehicule[] | undefined) {
     ravitaille: list.filter((v) => v.statut === "ravitaille").length,
     valide:     list.filter((v) => v.statut === "valide").length,
   };
+}
+
+function CentreBadge({ code }: { code?: string | null }) {
+  if (!code) return null;
+  return (
+    <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-semibold font-mono bg-teal-50 text-teal-800 border border-teal-200">
+      {code}
+    </span>
+  );
 }
 
 function SmartStatutBadge({ d }: { d: DemandeRavitaillement }) {
@@ -135,9 +145,20 @@ export default function DemandesPage() {
 
   const isDCDirector  = user?.role === "signataire" && user?.circuit_role === "directeur_commercial";
 
-  const filteredDemandes = isDCDirector
-    ? demandes.filter((d) => d.departement === "DC")
-    : demandes;
+  // Filtre par centre : Cellule et Chef Département Achat (qui voient tous les centres).
+  const canFilterCentre = isAdminOrManager || user?.role === "responsable_station_viewer";
+  const [centreFilter, setCentreFilter] = useState("");
+  const { centres } = useCentres(false);
+  const centresPresents = useMemo(() => {
+    const presents = new Set(demandes.map((d) => normCentre(d.centre)).filter(Boolean));
+    return centres.filter((c) => presents.has(c.code));
+  }, [demandes, centres]);
+
+  const filteredDemandes = demandes.filter((d) => {
+    if (isDCDirector && d.departement !== "DC") return false;
+    if (canFilterCentre && centreFilter && normCentre(d.centre) !== centreFilter) return false;
+    return true;
+  });
 
   const allVehicules = filteredDemandes.flatMap((d) => d.demande_vehicules ?? []);
   const totalVehicules = allVehicules.length;
@@ -177,6 +198,23 @@ export default function DemandesPage() {
             </Link>
           )}
         </div>
+
+        {canFilterCentre && (
+          <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-3">
+            <label htmlFor="filtre-centre" className="text-sm font-medium text-gray-700">Centre</label>
+            <select
+              id="filtre-centre"
+              value={centreFilter}
+              onChange={(e) => setCentreFilter(e.target.value)}
+              className="h-12 w-full sm:w-72 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all bg-white text-gray-700"
+            >
+              <option value="">Tous les centres</option>
+              {centresPresents.map((c) => (
+                <option key={c.code} value={c.code}>{c.zone} — {c.code}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3 mt-6">
           <div className="flex-1 min-w-[120px] bg-gray-50 rounded-xl p-4 border border-gray-200">
@@ -221,7 +259,7 @@ export default function DemandesPage() {
               <table className="w-full">
                 <thead className="bg-gradient-to-r from-green-50 to-teal-50 border-b border-gray-200">
                   <tr>
-                    {["Département", "Date", "Statut", "Ma signature", "Détail véhicules", ""].map((h) => (
+                    {["Département", "Centre", "Date", "Statut", "Ma signature", "Détail véhicules", ""].map((h) => (
                       <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider last:text-right">
                         {h}
                       </th>
@@ -232,6 +270,7 @@ export default function DemandesPage() {
                   {filteredDemandes.map((demande) => (
                     <tr key={demande.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{demande.departement}</td>
+                      <td className="px-6 py-4"><CentreBadge code={demande.centre} /></td>
                       <td className="px-6 py-4 text-gray-600 text-sm">
                         {new Date(demande.created_at).toLocaleDateString("fr-FR")}
                       </td>
@@ -267,7 +306,10 @@ export default function DemandesPage() {
                   className="flex items-start justify-between gap-3 p-4 hover:bg-gray-50 transition-colors"
                 >
                   <div className="min-w-0">
-                    <p className="font-semibold text-gray-900">{demande.departement}</p>
+                    <p className="font-semibold text-gray-900 flex items-center gap-2">
+                      {demande.departement}
+                      <CentreBadge code={demande.centre} />
+                    </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {new Date(demande.created_at).toLocaleDateString("fr-FR")}
                       {" · "}

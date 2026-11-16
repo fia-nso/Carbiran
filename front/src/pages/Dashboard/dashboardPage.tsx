@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { centreDuRavitaillement, useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { useCentres } from "@/hooks/useCentres";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
 import type { Vehicule } from "@/types";
@@ -63,6 +64,7 @@ function escapeHtml(value: string) {
 
 export default function DashboardPage() {
   const { ravitaillements, loading, reload } = useRavitaillementsVehicule();
+  const { centres: centresTable } = useCentres(false);
   useRealtimeSync({ onRavitaillementChange: reload });
 
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
@@ -133,24 +135,26 @@ export default function DashboardPage() {
   }, [ravitaillements, effectiveYear, selectedMonthIndex]);
 
   // Available zones and centres for the selected month
+  // Centres : table `centres`, restreints à ceux présents dans le mois (centre du ravitaillement ?? centre du véhicule).
   const { availableZones, availableCentres } = useMemo(() => {
     const zones = new Set<string>();
-    const centres = new Set<string>();
+    const presents = new Set<string>();
     for (const item of monthRavitaillements) {
       if (item.vehicule?.zone) zones.add(item.vehicule.zone);
-      if (item.vehicule?.centre) centres.add(item.vehicule.centre);
+      const c = centreDuRavitaillement(item);
+      if (c) presents.add(c);
     }
     return {
       availableZones: Array.from(zones).sort(),
-      availableCentres: Array.from(centres).sort(),
+      availableCentres: centresTable.filter((c) => presents.has(c.code)).map((c) => c.code),
     };
-  }, [monthRavitaillements]);
+  }, [monthRavitaillements, centresTable]);
 
   // Filtered ravitaillements for the detail panel
   const filteredMonthRavitaillements = useMemo(() => {
     return monthRavitaillements.filter((item) => {
       if (filterZone && item.vehicule?.zone !== filterZone) return false;
-      if (filterCentre && item.vehicule?.centre !== filterCentre) return false;
+      if (filterCentre && centreDuRavitaillement(item) !== filterCentre) return false;
       if (
         filterMatricule &&
         !item.vehicule?.matricule.toLowerCase().includes(filterMatricule.toLowerCase())
@@ -190,7 +194,7 @@ export default function DashboardPage() {
           matricule: item.vehicule?.matricule ?? `#${key}`,
           nom: item.vehicule?.vehicule ?? "—",
           zone: item.vehicule?.zone ?? "—",
-          centre: item.vehicule?.centre ?? "—",
+          centre: centreDuRavitaillement(item) || "—",
           count: 1,
           montant: item.montantRavitaille,
           litres: item.nLiter,

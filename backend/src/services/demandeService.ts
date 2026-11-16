@@ -93,7 +93,8 @@ function applyAccessFilter(
           userId, userCentre, dept: departement,
         })
       } else {
-        qb.andWhere('(d.created_by = :userId OR d.centre = :userCentre)', { userId, userCentre })
+        // Sans département : pas de demandes DC (réservées au chef de cours DC).
+        qb.andWhere("(d.created_by = :userId OR (d.centre = :userCentre AND d.departement <> 'DC'))", { userId, userCentre })
       }
       break
     case 'responsable_station':
@@ -293,6 +294,11 @@ export class DemandeService {
   ) {
     const current = await this.findRaw(id)
     if (!current) throw Object.assign(new Error('Demande introuvable'), { status: 404 })
+
+    // Seule la Cellule soumet (ou retire) la situation pour signature.
+    if (updates.situation_soumise !== undefined && role !== 'Admin' && role !== 'MENAGER') {
+      throw Object.assign(new Error('Seule la Cellule peut soumettre la situation'), { status: 403 })
+    }
 
     if (
       updates.statut !== undefined &&

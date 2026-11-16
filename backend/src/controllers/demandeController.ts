@@ -100,6 +100,10 @@ export const postDemande = async (req: Request, res: Response): Promise<void> =>
       if (userDept && departement !== userDept) {
         res.status(403).json({ error: `Vous ne pouvez créer que des demandes pour votre département (${userDept})` }); return
       }
+      // Sans département : le DC est réservé au chef de cours DC.
+      if (!userDept && departement.trim().toUpperCase() === 'DC') {
+        res.status(403).json({ error: 'Les demandes DC sont réservées au chef de cours DC' }); return
+      }
       centre = code
     }
 

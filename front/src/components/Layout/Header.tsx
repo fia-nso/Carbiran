@@ -11,10 +11,18 @@ const NAV_LINK =
 const MOBILE_NAV_LINK =
   "flex items-center px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/15 transition-colors font-medium text-white text-base";
 
-function getRoleLabel(role: string, departement?: string | null, circuitRole?: string | null): string {
+function getRoleLabel(
+  role: string,
+  departement?: string | null,
+  circuitRole?: string | null,
+  centre?: string | null
+): string {
   if (role === "Admin" || role === "MENAGER")  return "Cellule CSÉ";
-  if (role === "chef_de_cours")                return "Responsable Parc";
-  if (role === "responsable_station")          return "Superviseur/Station";
+  if (role === "chef_de_cours") {
+    const base = centre ? `Chef de centre ${centre}` : "Chef de centre";
+    return departement ? `${base} — ${departement}` : base;
+  }
+  if (role === "responsable_station")          return centre ? `Superviseur/Station ${centre}` : "Superviseur/Station";
   if (role === "responsable_station_viewer")   return "Chef Département Achat";
   if (role === "signataire") {
     if (circuitRole === "directeur_technique")   return "Directeur Technique";
@@ -44,7 +52,7 @@ export default function Header() {
   const isDT             = isDTUser(user);
   const isDMG            = isDMGUser(user);
   const canCreateDemande = user?.role === "chef_de_cours" || user?.role === "chef_departement";
-  const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.circuit_role) : "";
+  const roleLabel        = user ? getRoleLabel(user.role, user.departement, user.circuit_role, user.centre) : "";
 
   const handleLogout = async () => {
     try {
@@ -79,6 +87,7 @@ export default function Header() {
                     <>
                       <Link to="/users" className={NAV_LINK}>Users</Link>
                       <Link to="/logs"  className={NAV_LINK}>Logs</Link>
+                      <Link to="/centres" className={NAV_LINK}>Centres</Link>
                     </>
                   )}
                   <Link to="/demandes"         className={NAV_LINK}>Demandes</Link>
@@ -190,6 +199,7 @@ export default function Header() {
                 <>
                   <Link to="/users" className={MOBILE_NAV_LINK} onClick={closeMenu}>Users</Link>
                   <Link to="/logs"  className={MOBILE_NAV_LINK} onClick={closeMenu}>Logs</Link>
+                  <Link to="/centres" className={MOBILE_NAV_LINK} onClick={closeMenu}>Centres</Link>
                 </>
               )}
               <Link to="/demandes"         className={MOBILE_NAV_LINK} onClick={closeMenu}>Demandes</Link>

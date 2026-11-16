@@ -6,7 +6,8 @@ import ConfirmationCodeModal from "@/components/ui/ConfirmationCodeModal";
 import SearchableVehiculeSelect from "@/components/ui/SearchableVehiculeSelect";
 import { useAuthContext } from "@/context/AuthProvider";
 import { isReadOnlyUser } from "@/lib/roles";
-import { useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { centreDuRavitaillement, useRavitaillementsVehicule } from "@/hooks/useRavitaillementVehicule";
+import { useCentres } from "@/hooks/useCentres";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useVehicules } from "@/hooks/useVehicule";
 import { APP_URL } from "@/lib/env";
@@ -169,6 +170,7 @@ export default function RavitaillementVehiculePage() {
   } = useRavitaillementsVehicule();
   useRealtimeSync({ onRavitaillementChange: reload });
   const { allVehicules, loading: vehiculesLoading } = useVehicules();
+  const { centres: centresTable } = useCentres(false);
 
   const [search, setSearch] = useState("");
   const [dateFilterFrom, setDateFilterFrom] = useState("");
@@ -183,17 +185,23 @@ export default function RavitaillementVehiculePage() {
   // Lecture seule : viewer, DG, DT, DMG (cf. lib/roles.ts)
   const isViewer = isReadOnlyUser(user);
 
-  // Centres disponibles pour le département choisi (issus de la liste des véhicules)
+  // Centres disponibles pour le département choisi : table `centres`, restreinte aux
+  // centres où ce département a des véhicules ou des ravitaillements.
   const centresDisponibles = useMemo(() => {
     if (!departementFilter) return [];
-    const centres = new Set<string>();
+    const presents = new Set<string>();
     for (const v of allVehicules) {
       if (normalizeKey(v.zone) !== normalizeKey(departementFilter)) continue;
-      const centre = v.centre?.trim();
-      if (centre) centres.add(centre);
+      const centre = v.centre?.trim().toUpperCase();
+      if (centre) presents.add(centre);
     }
-    return [...centres].sort((a, b) => a.localeCompare(b, "fr"));
-  }, [allVehicules, departementFilter]);
+    for (const r of ravitaillements) {
+      if (normalizeKey(r.vehicule?.zone) !== normalizeKey(departementFilter)) continue;
+      const centre = centreDuRavitaillement(r);
+      if (centre) presents.add(centre);
+    }
+    return centresTable.filter((c) => presents.has(c.code)).map((c) => c.code);
+  }, [allVehicules, ravitaillements, centresTable, departementFilter]);
 
   const displayedRavitaillements = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -217,7 +225,7 @@ export default function RavitaillementVehiculePage() {
       const matchesDepartement =
         !departementFilter || normalizeKey(item.vehicule?.zone) === normalizeKey(departementFilter);
       const matchesCentre =
-        !centreFilter || normalizeKey(item.vehicule?.centre) === normalizeKey(centreFilter);
+        !centreFilter || centreDuRavitaillement(item) === centreFilter.trim().toUpperCase();
 
       return matchesSearch && matchesDateFrom && matchesDateTo && matchesDepartement && matchesCentre;
     });

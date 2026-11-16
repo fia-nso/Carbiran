@@ -5,6 +5,8 @@ import { useAuthContext } from "@/context/AuthProvider";
 import { isReadOnlyUser } from "@/lib/roles";
 import { useVehicules } from "@/hooks/useVehicule";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { useCentres } from "@/hooks/useCentres";
+import { apiErrorMessage } from "@/lib/api";
 import type { Vehicule } from "@/types";
 
 interface VehiculeFormState {
@@ -50,12 +52,13 @@ export default function VehiculePage() {
     setSearch,
     centreFilter,
     setCentreFilter,
-    centresDisponibles,
     addVehicule,
     updateVehicule,
     deleteVehicule,
   } = useVehicules();
   useRealtimeSync({ onDemandesChange: reload });
+  // Listes de centres : table `centres` (plus de texte libre).
+  const { centres } = useCentres(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicule, setEditingVehicule] = useState<Vehicule | null>(null);
@@ -131,7 +134,7 @@ export default function VehiculePage() {
       setEditingVehicule(null);
     } catch (error) {
       console.error(error);
-      alert("Une erreur est survenue lors de l'enregistrement du vehicule.");
+      alert(apiErrorMessage(error, "Une erreur est survenue lors de l'enregistrement du vehicule."));
     }
   }
 
@@ -375,8 +378,8 @@ export default function VehiculePage() {
                 className="h-12 w-full sm:w-auto px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white shadow-sm text-gray-700"
               >
                 <option value="">Tous les centres</option>
-                {centresDisponibles.map((centre) => (
-                  <option key={centre} value={centre}>{centre}</option>
+                {centres.map((c) => (
+                  <option key={c.code} value={c.code}>{c.code} — {c.nom}</option>
                 ))}
               </select>
 
@@ -697,14 +700,23 @@ export default function VehiculePage() {
               <label htmlFor="vehicule-centre" className="block text-sm font-medium text-gray-700 mb-2">
                 Centre
               </label>
-              <input
+              <select
                 id="vehicule-centre"
-                type="text"
                 value={form.centre}
                 onChange={(event) => updateForm("centre", event.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200"
-                placeholder="Optionnel"
-              />
+                className="w-full h-12 px-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 bg-white"
+              >
+                <option value="">Aucun centre</option>
+                {centres.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.nom} ({c.zone}){c.actif ? "" : " — inactif"}
+                  </option>
+                ))}
+                {/* Ancienne valeur hors table : affichée pour ne pas la perdre silencieusement */}
+                {form.centre && !centres.some((c) => c.code === form.centre) && (
+                  <option value={form.centre}>{form.centre} (inconnu)</option>
+                )}
+              </select>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

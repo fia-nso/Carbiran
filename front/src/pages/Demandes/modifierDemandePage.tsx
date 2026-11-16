@@ -3,10 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useVehicules } from "@/hooks/useVehicule";
-import { apiGetDemande } from "@/lib/api";
-
-const normalizeZone = (zone: string) => zone?.trim().toLowerCase();
-const KNOWN_ZONES: readonly string[] = ["zone a", "zone b", "rx&sys", "fo", "cpde", "dc"];
+import { apiErrorMessage, apiGetDemande } from "@/lib/api";
+import { normCentre, useCentres } from "@/hooks/useCentres";
+import { vehiculeDansDepartement } from "@/lib/departements";
 
 export default function ModifierDemandePage() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +15,9 @@ export default function ModifierDemandePage() {
   const { allVehicules, loading: vLoading } = useVehicules();
 
   const [departement, setDepartement] = useState<string | null>(null);
+  // Centre de la demande (figé à la création) : seuls ses véhicules peuvent être ajoutés.
+  const [centre, setCentre] = useState<string | null>(null);
+  const { libelle } = useCentres(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [matriculeSearch, setMatriculeSearch] = useState("");
   const [loadingDemande, setLoadingDemande] = useState(true);
@@ -28,6 +30,7 @@ export default function ModifierDemandePage() {
     apiGetDemande(id)
       .then((data: any) => {
         setDepartement(data.departement as string);
+        setCentre(normCentre(data.centre) || null);
         const ids = ((data.demande_vehicules ?? []) as { vehicule_id: number }[]).map(
           (dv) => dv.vehicule_id
         );
@@ -45,17 +48,11 @@ export default function ModifierDemandePage() {
   }, [user, navigate]);
 
   const vehiculesDept = useMemo(() => {
-    if (!departement) return [];
-    return allVehicules.filter((v) => {
-      const zoneMatch =
-        departement === "Autre"
-          ? !KNOWN_ZONES.includes(normalizeZone(v.zone))
-          : normalizeZone(v.zone) === normalizeZone(departement);
-      if (!zoneMatch) return false;
-      if (v.centre?.trim().toUpperCase() !== "NKTT") return false;
-      return true;
-    });
-  }, [allVehicules, departement]);
+    if (!departement || !centre) return [];
+    return allVehicules.filter(
+      (v) => vehiculeDansDepartement(v.zone, departement) && normCentre(v.centre) === centre
+    );
+  }, [allVehicules, departement, centre]);
 
   const vehiculesFiltres = useMemo(
     () =>
@@ -107,7 +104,7 @@ export default function ModifierDemandePage() {
       await updateDemandeVehicules(id!, [...selected]);
       navigate(`/demandes/${id}`);
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : "Erreur lors de la modification.");
+      setSubmitError(apiErrorMessage(err, "Erreur lors de la modification."));
     } finally {
       setSubmitting(false);
     }
@@ -152,7 +149,8 @@ export default function ModifierDemandePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Département badge */}
+        {/* Département + centre */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 flex items-center gap-3">
           <span className="text-teal-600">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,13 +162,18 @@ export default function ModifierDemandePage() {
             <p className="text-sm font-semibold text-teal-900">{departement ?? "—"}</p>
           </div>
         </div>
+        <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4">
+          <p className="text-xs text-teal-600 font-medium">Centre</p>
+          <p className="text-sm font-semibold text-teal-900">{libelle(centre)}</p>
+        </div>
+        </div>
 
         {/* Véhicules */}
         <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div>
               <p className="text-sm font-semibold text-gray-700">
-                Véhicules — {departement ?? "—"}
+                Véhicules — {departement ?? "—"}{centre ? ` · ${centre}` : ""}
               </p>
               <p className="text-xs text-gray-400 mt-0.5">{selected.size} sélectionné(s)</p>
             </div>

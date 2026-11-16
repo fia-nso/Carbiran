@@ -16,6 +16,7 @@ interface RavitaillementRow {
   commentaire: string | null;
   kilometrage: number | string;
   n_liter: number | string;
+  centre?: string | null;
   created_at?: string;
   updated_at?: string;
   vehicule?: {
@@ -36,6 +37,13 @@ interface RavitaillementVehiculePayload {
   commentaire: string;
   kilometrage: number;
   nLiter: number;
+  /** Centre du ravitaillement ; omis → le backend prend le centre actuel du véhicule. */
+  centre?: string | null;
+}
+
+/** Centre d'un ravitaillement : celui enregistré, à défaut le centre actuel du véhicule. */
+export function centreDuRavitaillement(r: Pick<RavitaillementVehicule, "centre" | "vehicule">): string {
+  return (r.centre ?? r.vehicule?.centre ?? "").trim().toUpperCase();
 }
 
 function mapRow(row: RavitaillementRow): RavitaillementVehicule {
@@ -61,6 +69,7 @@ function mapRow(row: RavitaillementRow): RavitaillementVehicule {
     commentaire: row.commentaire || "",
     kilometrage: Number(row.kilometrage || 0),
     nLiter: Number(row.n_liter || 0),
+    centre: row.centre ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -74,6 +83,7 @@ function toApiPayload(payload: RavitaillementVehiculePayload) {
     commentaire: payload.commentaire,
     kilometrage: payload.kilometrage,
     n_liter: payload.nLiter,
+    ...(payload.centre ? { centre: payload.centre } : {}),
   };
 }
 

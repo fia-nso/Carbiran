@@ -17,5 +17,16 @@ export const isDMG = (user: RoleUser) => user?.role === "dmg";
 export const isReadOnlyUser = (user: RoleUser) =>
   user?.role === "viewer" || isDG(user) || isDT(user) || isDMG(user);
 
+/** Chef de centre (rôle technique chef_de_cours). */
+export const isChefCentre = (user: RoleUser) => user?.role === "chef_de_cours";
+
+/** Superviseur / station de ravitaillement d'un centre. */
+export const isStation = (user: RoleUser) => user?.role === "responsable_station";
+
+/** Rôles pour lesquels un centre de rattachement est obligatoire. */
+export const ROLES_AVEC_CENTRE = ["chef_de_cours", "responsable_station"] as const;
+export const roleExigeCentre = (role: string | null | undefined) =>
+  !!role && (ROLES_AVEC_CENTRE as readonly string[]).includes(role);
+
 /** Page d'accueil selon le rôle (DMG n'a pas accès aux demandes). */
 export const homePathFor = (user: RoleUser) => (isDMG(user) ? "/dashboard" : "/demandes");

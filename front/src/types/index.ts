@@ -18,6 +18,20 @@ export interface User {
   role: AppRole;
   departement?: string | null;
   circuit_role?: string | null;
+  /** Centre de rattachement (obligatoire pour chef_de_cours et responsable_station). */
+  centre?: string | null;
+}
+
+export type ZoneCentre = "Zone A" | "Zone B";
+
+/** Centre RIMATEL (table `centres`). `code` = valeur de vehicule.centre / demande.centre / user.centre. */
+export interface Centre {
+  code: string;
+  nom: string;
+  zone: ZoneCentre;
+  actif: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // --- Workflow ravitaillement ---
@@ -44,6 +58,8 @@ export interface DemandeSignatureLite {
 export interface DemandeRavitaillement {
   id: string;
   departement: string;
+  /** Centre de la demande (figé à la création). */
+  centre?: string;
   statut: StatutDemande;
   situation_soumise?: boolean;
   created_by: string;
@@ -103,6 +119,8 @@ export interface RavitaillementVehicule {
   commentaire: string;
   kilometrage: number;
   nLiter: number;
+  /** Centre au moment du ravitaillement (null pour les anciens enregistrements). */
+  centre?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

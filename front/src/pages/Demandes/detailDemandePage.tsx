@@ -6,6 +6,7 @@ import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavi
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
+import { useCentres } from "@/hooks/useCentres";
 import {
   useSignatures,
   CIRCUIT_SITUATION,
@@ -126,6 +127,7 @@ function mapRow(row: any): DemandeRavitaillement {
   return {
     id: row.id,
     departement: row.departement,
+    centre: row.centre ?? undefined,
     statut: row.statut as StatutDemande,
     situation_soumise: row.situation_soumise ?? false,
     created_by: row.created_by,
@@ -197,6 +199,7 @@ const PHOTO_LABELS: Record<TypePhoto, string> = {
 export default function DetailDemandePage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthContext();
+  const { libelle: libelleCentre } = useCentres(false);
   const {
     validerDemandeDept,
     validerDemandeCommercial,
@@ -490,6 +493,8 @@ export default function DetailDemandePage() {
         kilometrage:        dv.kilometrage ?? 0,
         date:               new Date().toISOString().split("T")[0],
         commentaire:        "Ravitaillement validé par la Cellule CSÉ",
+        // Centre de la demande (et non le centre actuel du véhicule, qui peut avoir changé).
+        ...(demande.centre ? { centre: demande.centre } : {}),
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -991,6 +996,14 @@ export default function DetailDemandePage() {
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">{demande.departement}</h1>
+              {demande.centre && (
+                <span
+                  className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200"
+                  title="Centre de la demande"
+                >
+                  {libelleCentre(demande.centre)}
+                </span>
+              )}
               <StatutBadge statut={demande.statut} />
             </div>
             <p className="text-sm text-gray-500 mt-1">
