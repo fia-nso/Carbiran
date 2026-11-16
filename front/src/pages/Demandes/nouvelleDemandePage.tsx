@@ -92,12 +92,12 @@ export default function NouvelleDemandePage() {
   const deptEffectif = deptImpose || departement;
   const centreEffectif = isChefCentre ? centreImpose : centreChoisi;
 
-  // Chef de centre : départements ayant des véhicules dans son centre (DC exclu sans département).
+  // Chef de centre sans département : tous les départements ayant des véhicules dans son centre (DC compris).
   const departementsDisponibles = useMemo(() => {
     if (!isChefCentre || deptImpose || !centreImpose) return [];
     const vehiculesCentre = allVehicules.filter((v) => normCentre(v.centre) === centreImpose);
     return DEPARTEMENTS.filter(
-      (d) => d !== "DC" && vehiculesCentre.some((v) => vehiculeDansDepartement(v.zone, d))
+      (d) => vehiculesCentre.some((v) => vehiculeDansDepartement(v.zone, d))
     );
   }, [isChefCentre, deptImpose, centreImpose, allVehicules]);
 

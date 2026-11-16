@@ -93,8 +93,8 @@ function applyAccessFilter(
           userId, userCentre, dept: departement,
         })
       } else {
-        // Sans département : pas de demandes DC (réservées au chef de cours DC).
-        qb.andWhere("(d.created_by = :userId OR (d.centre = :userCentre AND d.departement <> 'DC'))", { userId, userCentre })
+        // Sans département : toutes les demandes de son centre, DC comprises.
+        qb.andWhere('(d.created_by = :userId OR d.centre = :userCentre)', { userId, userCentre })
       }
       break
     case 'responsable_station':
