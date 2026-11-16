@@ -3,15 +3,18 @@ import { DemandeService } from '../services/demandeService'
 import {
   createNotification,
   notifyByRole,
-  notifyByRoles,
   notifyByRoleAndDept,
+  notifyStationDuCentre,
 } from '../services/notificationService'
+import { CentreService, libelleCentre } from '../services/centreService'
+import { getUserCentre } from '../lib/userCentre'
 import { AppDataSource } from '../config/database'
 import { User } from '../entities/User'
 import type { AppRole } from '../types/index'
 import { serializeBonWithAssets, serializeDemandeWithAssets } from '../lib/storageAssets'
 
 const demandeService = new DemandeService()
+const centreService = new CentreService()
 
 export const getBon = async (req: Request, res: Response): Promise<void> => {
   const dvId = req.params['dvId'] as string
@@ -63,22 +66,49 @@ export const getHistoriqueVehicules = async (req: Request, res: Response): Promi
 }
 
 export const postDemande = async (req: Request, res: Response): Promise<void> => {
-  const { departement, vehicule_ids } = req.body as { departement?: string; vehicule_ids?: number[] }
+  const { departement, vehicule_ids, centre: centreDemande } =
+    req.body as { departement?: string; vehicule_ids?: number[]; centre?: string }
 
   if (!departement || !Array.isArray(vehicule_ids) || vehicule_ids.length === 0) {
     res.status(400).json({ error: 'departement et vehicule_ids (non vide) requis' }); return
   }
 
   const { role, sub, departement: userDept } = req.user!
+
+  // Seuls le chef de centre (chef_de_cours) et le chef de département créent des demandes.
+  if (role !== 'chef_de_cours' && role !== 'chef_departement') {
+    res.status(403).json({ error: 'Seuls le chef de centre et le chef de département peuvent créer une demande' }); return
+  }
   const isChefDept = role === 'chef_departement'
   const statutInitial = isChefDept ? 'validee_dept' : 'en_attente'
 
   try {
-    const demande = await demandeService.create(departement, vehicule_ids, sub, statutInitial)
-    void triggerCreationNotifications(role, departement, vehicule_ids.length, demande.id, userDept)
+    let centre: string
+    if (isChefDept) {
+      // Chef de département : son département, et un centre choisi qui doit exister et être actif.
+      if (!userDept) { res.status(403).json({ error: 'Aucun département associé à votre compte' }); return }
+      if (departement !== userDept) {
+        res.status(403).json({ error: `Vous ne pouvez créer que des demandes pour votre département (${userDept})` }); return
+      }
+      const code = await centreService.verifierCode(centreDemande, { actifRequis: true })
+      if (!code) { res.status(400).json({ error: 'centre requis' }); return }
+      centre = code
+    } else {
+      // Chef de centre : TOUJOURS son centre, lu en base (le centre envoyé par le navigateur est ignoré).
+      const code = await getUserCentre(sub)
+      if (!code) { res.status(403).json({ error: 'Aucun centre de rattachement associé à votre compte' }); return }
+      if (userDept && departement !== userDept) {
+        res.status(403).json({ error: `Vous ne pouvez créer que des demandes pour votre département (${userDept})` }); return
+      }
+      centre = code
+    }
+
+    const demande = await demandeService.create(departement, centre, vehicule_ids, sub, statutInitial)
+    void triggerCreationNotifications(role, departement, centre, vehicule_ids.length, demande.id)
       .catch((err) => console.error('[notif création demande]', err))
     res.status(201).json({ id: demande.id })
-  } catch (err) {
+  } catch (err: any) {
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[POST /demandes]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }
@@ -101,12 +131,13 @@ export const patchDemande = async (req: Request, res: Response): Promise<void> =
     const updated = await demandeService.patch(id, { statut, situation_soumise }, role, sub, userDept)
 
     if (statut) {
-      void triggerStatusNotifications(statut, id, current.departement, current.created_by)
+      void triggerStatusNotifications(statut, id, current.departement, current.centre, current.created_by)
         .catch((err) => console.error('[notif changement statut]', err))
     }
 
     if (situation_soumise) {
-      const msg = `La situation et les bons sont prêts pour signature — département ${current.departement}`
+      const lib = await libelleCentre(current.centre)
+      const msg = `La situation et les bons sont prêts pour signature — département ${current.departement} (${lib})`
       if (current.departement === 'DC') {
         const dcUser = await AppDataSource.getRepository(User).findOne({
           where: { circuit_role: 'directeur_commercial' },
@@ -136,7 +167,7 @@ export const deleteDemande = async (req: Request, res: Response): Promise<void> 
 
     void createNotification(
       result.currentCreatedBy,
-      `Votre demande ${result.currentDepartement} a été annulée.`,
+      `Votre demande ${result.currentDepartement} (${result.currentCentre}) a été annulée.`,
       'annulation',
       id
     ).catch((err) => console.error('[notif annulation]', err))
@@ -173,7 +204,7 @@ export const replaceDemandeVehicules = async (req: Request, res: Response): Prom
 export const patchDemandeVehicule = async (req: Request, res: Response): Promise<void> => {
   const demandeId = req.params['id'] as string
   const dvId = req.params['dvId'] as string
-  const { role } = req.user!
+  const { role, sub } = req.user!
 
   const body = req.body as Record<string, unknown>
   const allowed = ['montant', 'n_liter', 'kilometrage', 'statut']
@@ -187,13 +218,18 @@ export const patchDemandeVehicule = async (req: Request, res: Response): Promise
   }
 
   try {
-    const result = await demandeService.patchDemandeVehicule(demandeId, dvId, fields as any, role)
+    const result = await demandeService.patchDemandeVehicule(demandeId, dvId, fields as any, role, sub)
 
     if (result.promoted && result.promotedDepartement) {
-      void Promise.all([
-        notifyByRole('Admin',   'Tous les véhicules ravitaillés — demande prête pour validation', 'soumission_station', demandeId),
-        notifyByRole('MENAGER', 'Tous les véhicules ravitaillés — demande prête pour validation', 'soumission_station', demandeId),
-      ]).catch((err) => console.error('[notif véhicules ravitaillés]', err))
+      void libelleCentre(result.promotedCentre)
+        .then((lib) => {
+          const msg = `Tous les véhicules ravitaillés — demande ${result.promotedDepartement} (${lib}) prête pour validation`
+          return Promise.all([
+            notifyByRole('Admin',   msg, 'soumission_station', demandeId),
+            notifyByRole('MENAGER', msg, 'soumission_station', demandeId),
+          ])
+        })
+        .catch((err) => console.error('[notif véhicules ravitaillés]', err))
     }
 
     res.json(result.dv)
@@ -205,31 +241,34 @@ export const patchDemandeVehicule = async (req: Request, res: Response): Promise
 async function triggerCreationNotifications(
   role: AppRole,
   departement: string,
+  centre: string,
   nbVehicules: number,
-  demandeId: string,
-  _userDept: string | null
+  demandeId: string
 ): Promise<void> {
   const isChefDept = role === 'chef_departement'
   const isDC = role === 'chef_de_cours' && departement === 'DC'
+  const lib = await libelleCentre(centre)
 
   if (isChefDept) {
-    await notifyByRoles(
-      ['responsable_station', 'responsable_station_viewer'],
-      `Nouvelle demande approuvée pour ${departement} — ravitaillement à effectuer`,
+    // Station du centre de la demande + Chef Département Achat (tous centres).
+    await notifyStationDuCentre(
+      centre,
+      `Nouvelle demande approuvée pour ${departement} (${lib}) — ravitaillement à effectuer`,
       'validation_dept',
-      demandeId
+      demandeId,
+      departement
     )
   } else if (isDC) {
     const dcUser = await AppDataSource.getRepository(User).findOne({
       where: { circuit_role: 'directeur_commercial' },
       select: { id: true },
     })
-    if (dcUser) await createNotification(dcUser.id, 'Nouvelle demande DC en attente de votre approbation', 'nouvelle_demande', demandeId)
+    if (dcUser) await createNotification(dcUser.id, `Nouvelle demande DC (${lib}) en attente de votre approbation`, 'nouvelle_demande', demandeId)
   } else {
     await notifyByRoleAndDept(
       'chef_departement',
       departement,
-      `Nouvelle demande de ravitaillement — ${departement} (${nbVehicules} véhicule(s))`,
+      `Nouvelle demande de ravitaillement — ${departement} — ${lib} (${nbVehicules} véhicule(s))`,
       'nouvelle_demande',
       demandeId
     )
@@ -240,21 +279,25 @@ async function triggerStatusNotifications(
   newStatut: string,
   demandeId: string,
   departement: string,
+  centre: string,
   createdBy: string
 ): Promise<void> {
+  const lib = await libelleCentre(centre)
   switch (newStatut) {
     case 'validee_dept':
-      await notifyByRoles(
-        ['responsable_station', 'responsable_station_viewer'],
-        `Demande approuvée pour ${departement} — ravitaillement à effectuer`,
+      // Station du centre de la demande + Chef Département Achat (tous centres).
+      await notifyStationDuCentre(
+        centre,
+        `Demande approuvée pour ${departement} (${lib}) — ravitaillement à effectuer`,
         'validation_dept',
-        demandeId
+        demandeId,
+        departement
       )
-      await createNotification(createdBy, 'Votre demande a été approuvée.', 'validation_dept', demandeId)
+      await createNotification(createdBy, `Votre demande ${departement} (${lib}) a été approuvée.`, 'validation_dept', demandeId)
       break
     case 'validee_station':
-      await notifyByRole('Admin',   `Demande ${departement} prête pour validation cellule`, 'soumission_station', demandeId)
-      await notifyByRole('MENAGER', `Demande ${departement} prête pour validation cellule`, 'soumission_station', demandeId)
+      await notifyByRole('Admin',   `Demande ${departement} (${lib}) prête pour validation cellule`, 'soumission_station', demandeId)
+      await notifyByRole('MENAGER', `Demande ${departement} (${lib}) prête pour validation cellule`, 'soumission_station', demandeId)
       break
     case 'validee_cellule':
       if (departement === 'DC') {
@@ -262,18 +305,18 @@ async function triggerStatusNotifications(
           where: { circuit_role: 'directeur_commercial' },
           select: { id: true },
         })
-        if (dcUser) await createNotification(dcUser.id, `La demande DC a été validée par la cellule.`, 'validation_cellule', demandeId)
+        if (dcUser) await createNotification(dcUser.id, `La demande DC (${lib}) a été validée par la cellule.`, 'validation_cellule', demandeId)
       } else {
         await notifyByRoleAndDept(
           'chef_departement', departement,
-          `La demande ${departement} a été validée par la cellule.`,
+          `La demande ${departement} (${lib}) a été validée par la cellule.`,
           'validation_cellule', demandeId
         )
       }
-      await createNotification(createdBy, `Votre demande ${departement} a été validée.`, 'validation_cellule', demandeId)
+      await createNotification(createdBy, `Votre demande ${departement} (${lib}) a été validée.`, 'validation_cellule', demandeId)
       break
     case 'annulee':
-      await createNotification(createdBy, `Votre demande ${departement} a été annulée.`, 'annulation', demandeId)
+      await createNotification(createdBy, `Votre demande ${departement} (${lib}) a été annulée.`, 'annulation', demandeId)
       break
   }
 }

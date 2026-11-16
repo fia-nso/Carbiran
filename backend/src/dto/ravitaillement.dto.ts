@@ -21,6 +21,10 @@ export class CreateRavitaillementDto {
   @IsOptional()
   @IsNumber()
   n_liter?: number
+
+  @IsOptional()
+  @IsString()
+  centre?: string
 }
 
 export class UpdateRavitaillementDto {

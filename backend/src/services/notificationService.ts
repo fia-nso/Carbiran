@@ -89,3 +89,48 @@ export async function notifyByCircuitRole(
   const users = await userRepo().find({ where: { circuit_role: circuitRole }, select: { id: true } })
   await Promise.all(users.map((u) => createNotification(u.id, message, type, demandeId, departement)))
 }
+
+/**
+ * Notifie les utilisateurs d'un rôle rattachés à un centre donné.
+ * Retourne le nombre d'utilisateurs notifiés.
+ */
+export async function notifyByRoleAndCentre(
+  role: string,
+  centre: string,
+  message: string,
+  type: string,
+  demandeId?: string | null,
+  departement?: string
+): Promise<number> {
+  const users = await userRepo().find({ where: { role, centre }, select: { id: true } })
+  await Promise.all(users.map((u) => createNotification(u.id, message, type, demandeId, departement)))
+  return users.length
+}
+
+/**
+ * Prévient la station du centre de la demande + le Chef Département Achat
+ * (responsable_station_viewer, tous centres). Si aucune station n'existe pour
+ * ce centre : avertissement serveur + notification à la Cellule (Admin, MENAGER).
+ */
+export async function notifyStationDuCentre(
+  centre: string,
+  message: string,
+  type: string,
+  demandeId?: string | null,
+  departement?: string
+): Promise<void> {
+  const [nbStations] = await Promise.all([
+    notifyByRoleAndCentre('responsable_station', centre, message, type, demandeId, departement),
+    notifyByRole('responsable_station_viewer', message, type, demandeId, departement),
+  ])
+  if (nbStations === 0) {
+    console.warn(`[notif station] Aucune station (responsable_station) pour le centre ${centre} — demande ${demandeId ?? '?'}`)
+    await notifyByRoles(
+      ['Admin', 'MENAGER'],
+      `Aucune station configurée pour le centre ${centre} — ${message}`,
+      type,
+      demandeId,
+      departement
+    )
+  }
+}

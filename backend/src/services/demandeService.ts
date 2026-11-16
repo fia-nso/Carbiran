@@ -8,6 +8,8 @@ import { Vehicule } from '../entities/Vehicule'
 import { LogService } from './logService'
 import type { AppRole } from '../types/index'
 import { evaluerConsommation } from './consommation'
+import { getUserCentre } from '../lib/userCentre'
+import { normaliserCodeCentre } from './centreService'
 
 function demandeRepo() {
   return AppDataSource.getRepository(Demande)
@@ -17,12 +19,58 @@ function dvRepo() {
   return AppDataSource.getRepository(DemandeVehicule)
 }
 
+function httpError(status: number, message: string): Error {
+  return Object.assign(new Error(message), { status })
+}
+
+/** Départements « connus » : tout véhicule hors de cette liste relève du département « Autre ». */
+const DEPARTEMENTS_CONNUS = ['zone a', 'zone b', 'rx&sys', 'fo', 'cpde', 'dc']
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase()
+
+/** Le département d'un véhicule = son champ `zone` (même règle que le front). */
+export function vehiculeDansDepartement(zoneVehicule: string | null | undefined, departement: string): boolean {
+  if (norm(departement) === 'autre') return !DEPARTEMENTS_CONNUS.includes(norm(zoneVehicule))
+  return norm(zoneVehicule) === norm(departement)
+}
+
+/**
+ * Vérifie que tous les véhicules existent et appartiennent au département ET au centre donnés.
+ * Lève 400 sinon (avec les matricules fautifs).
+ */
+async function verifierVehiculesDemande(
+  vehiculeIds: number[],
+  departement: string,
+  centre: string,
+  repo = AppDataSource.getRepository(Vehicule)
+): Promise<void> {
+  if (vehiculeIds.length === 0) return
+  const vehicules = await repo.find({ where: { id: In(vehiculeIds) } })
+  const trouves = new Set(vehicules.map((v) => v.id))
+  const manquants = vehiculeIds.filter((vid) => !trouves.has(vid))
+  if (manquants.length > 0) throw httpError(400, `Véhicule(s) introuvable(s) : ${manquants.join(', ')}`)
+
+  const horsDept = vehicules.filter((v) => !vehiculeDansDepartement(v.zone, departement))
+  if (horsDept.length > 0) {
+    throw httpError(400, `Véhicule(s) hors du département ${departement} : ${horsDept.map((v) => v.matricule).join(', ')}`)
+  }
+  const horsCentre = vehicules.filter((v) => normaliserCodeCentre(v.centre) !== centre)
+  if (horsCentre.length > 0) {
+    throw httpError(400, `Véhicule(s) hors du centre ${centre} : ${horsCentre.map((v) => v.matricule).join(', ')}`)
+  }
+}
+
+/** Centre lu en base, uniquement pour les rôles dont la visibilité en dépend. */
+async function centrePourFiltre(role: AppRole, userId: string): Promise<string | null> {
+  return role === 'chef_de_cours' || role === 'responsable_station' ? getUserCentre(userId) : null
+}
+
 function applyAccessFilter(
   qb: SelectQueryBuilder<Demande>,
   role: AppRole,
   userId: string,
   departement: string | null,
-  circuitRole: string | null = null
+  circuitRole: string | null = null,
+  userCentre: string | null = null
 ): void {
   switch (role) {
     case 'Admin':
@@ -35,7 +83,25 @@ function applyAccessFilter(
         qb.andWhere('d.departement = :dept', { dept: departement })
       }
       break
+    case 'chef_de_cours':
+      // Chef de centre : demandes de SON centre (+ son département s'il en a un, cas DC),
+      // et toujours ses propres demandes.
+      if (!userCentre) {
+        qb.andWhere('d.created_by = :userId', { userId })
+      } else if (departement) {
+        qb.andWhere('(d.created_by = :userId OR (d.centre = :userCentre AND d.departement = :dept))', {
+          userId, userCentre, dept: departement,
+        })
+      } else {
+        qb.andWhere('(d.created_by = :userId OR d.centre = :userCentre)', { userId, userCentre })
+      }
+      break
     case 'responsable_station':
+      // Station : demandes de son centre uniquement. Sans centre → rien.
+      qb.andWhere("d.statut IN ('validee_dept', 'validee_station', 'validee_cellule')")
+      if (!userCentre) qb.andWhere('1 = 0')
+      else qb.andWhere('d.centre = :userCentre', { userCentre })
+      break
     case 'responsable_station_viewer':
       qb.andWhere("d.statut IN ('validee_dept', 'validee_station', 'validee_cellule')")
       break
@@ -58,8 +124,9 @@ function canChangeStatut(
   role: AppRole,
   userId: string,
   userDept: string | null,
-  current: { statut: string; departement: string; created_by: string },
-  targetStatut: string
+  current: { statut: string; departement: string; centre: string; created_by: string },
+  targetStatut: string,
+  userCentre: string | null = null
 ): boolean {
   if (role === 'Admin' || role === 'MENAGER') return true
 
@@ -72,6 +139,8 @@ function canChangeStatut(
   }
 
   if (role === 'responsable_station') {
+    // La station n'agit que sur les demandes de son centre.
+    if (!userCentre || current.centre !== userCentre) return false
     return (
       (current.statut === 'validee_dept' && targetStatut === 'validee_station') ||
       (current.statut === 'validee_station' && targetStatut === 'validee_cellule')
@@ -97,7 +166,7 @@ export class DemandeService {
       .leftJoinAndSelect('d.demande_vehicules', 'dv')
       .orderBy('d.created_at', 'DESC')
 
-    applyAccessFilter(qb, role, userId, departement, circuitRole)
+    applyAccessFilter(qb, role, userId, departement, circuitRole, await centrePourFiltre(role, userId))
     const rows = await qb.getMany()
 
     // Charge les signatures de toutes les demandes retournées en une seule requête
@@ -129,6 +198,7 @@ export class DemandeService {
     return rows.map((d) => ({
       id: d.id,
       departement: d.departement,
+      centre: d.centre,
       statut: d.statut,
       situation_soumise: d.situation_soumise,
       created_by: d.created_by,
@@ -147,7 +217,7 @@ export class DemandeService {
       .leftJoinAndSelect('d.creator', 'u')
       .where('d.id = :id', { id })
 
-    applyAccessFilter(qb, role, userId, departement, circuitRole)
+    applyAccessFilter(qb, role, userId, departement, circuitRole, await centrePourFiltre(role, userId))
 
     const demande = await qb.getOne()
     if (!demande) return null
@@ -163,6 +233,7 @@ export class DemandeService {
     return {
       id: demande.id,
       departement: demande.departement,
+      centre: demande.centre,
       statut: demande.statut,
       situation_soumise: demande.situation_soumise,
       created_by: demande.created_by,
@@ -179,16 +250,28 @@ export class DemandeService {
   async findRaw(id: string) {
     return demandeRepo().findOne({
       where: { id },
-      select: { id: true, statut: true, departement: true, created_by: true },
+      select: { id: true, statut: true, departement: true, centre: true, created_by: true },
     })
   }
 
-  async create(departement: string, vehicule_ids: number[], userId: string, statut: string) {
+  /**
+   * Crée une demande. `centre` doit déjà être déterminé et validé par l'appelant
+   * (centre du chef de centre lu en base, ou centre actif choisi par le chef de département).
+   * Tous les véhicules doivent être du département ET du centre de la demande.
+   */
+  async create(departement: string, centre: string, vehiculeIdsInput: number[], userId: string, statut: string) {
+    const vehiculeIds = [...new Set(vehiculeIdsInput.map(Number))]
+    if (vehiculeIds.length === 0 || vehiculeIds.some((v) => !Number.isInteger(v) || v <= 0)) {
+      throw httpError(400, 'vehicule_ids invalides')
+    }
+
     return AppDataSource.manager.transaction(async (em) => {
-      const demande = em.create(Demande, { departement, statut, created_by: userId })
+      await verifierVehiculesDemande(vehiculeIds, departement, centre, em.getRepository(Vehicule))
+
+      const demande = em.create(Demande, { departement, centre, statut, created_by: userId })
       const saved = await em.save(Demande, demande)
 
-      const dvs = vehicule_ids.map((vid) =>
+      const dvs = vehiculeIds.map((vid) =>
         em.create(DemandeVehicule, {
           demande_id: saved.id,
           vehicule_id: vid,
@@ -213,7 +296,7 @@ export class DemandeService {
 
     if (
       updates.statut !== undefined &&
-      !canChangeStatut(role, userId, userDept, current, updates.statut)
+      !canChangeStatut(role, userId, userDept, current, updates.statut, await centrePourFiltre(role, userId))
     ) {
       throw Object.assign(new Error('Transition de statut non autorisée'), { status: 403 })
     }
@@ -227,7 +310,7 @@ export class DemandeService {
     role: AppRole,
     userId: string,
     userDept: string | null
-  ): Promise<{ demande: Demande; currentDepartement: string; currentCreatedBy: string } | null> {
+  ): Promise<{ demande: Demande; currentDepartement: string; currentCentre: string; currentCreatedBy: string } | null> {
     const current = await this.findRaw(id)
     if (!current) return null
 
@@ -249,6 +332,7 @@ export class DemandeService {
     return {
       demande: updated!,
       currentDepartement: current.departement,
+      currentCentre: current.centre,
       currentCreatedBy: current.created_by,
     }
   }
@@ -314,6 +398,9 @@ export class DemandeService {
         )
       }
 
+      // Véhicules ajoutés : même département et même centre que la demande.
+      await verifierVehiculesDemande(toAdd, demande.departement, demande.centre, em.getRepository(Vehicule))
+
       if (toRemove.length > 0) {
         await em.remove(DemandeVehicule, toRemove)
       }
@@ -364,10 +451,23 @@ export class DemandeService {
     demandeId: string,
     dvId: string,
     fields: { montant?: number; n_liter?: number; kilometrage?: number; statut?: string },
-    role: AppRole
-  ): Promise<{ dv: DemandeVehicule; promoted: boolean; promotedDepartement?: string }> {
+    role: AppRole,
+    userId: string
+  ): Promise<{ dv: DemandeVehicule; promoted: boolean; promotedDepartement?: string; promotedCentre?: string }> {
     if (!['Admin', 'MENAGER', 'responsable_station'].includes(role)) {
       throw Object.assign(new Error('Accès refusé'), { status: 403 })
+    }
+
+    if (role === 'responsable_station') {
+      // La station ne saisit que sur les demandes de son centre.
+      const [userCentre, demande] = await Promise.all([
+        getUserCentre(userId),
+        demandeRepo().findOne({ where: { id: demandeId }, select: { id: true, centre: true } }),
+      ])
+      if (!demande) throw httpError(404, 'Demande introuvable')
+      if (!userCentre || demande.centre !== userCentre) {
+        throw httpError(403, "Accès refusé — demande d'un autre centre")
+      }
     }
 
     return AppDataSource.manager.transaction(async (em) => {
@@ -384,7 +484,7 @@ export class DemandeService {
           if (demande && ['validee_dept', 'en_attente'].includes(demande.statut)) {
             demande.statut = 'validee_station'
             await em.save(Demande, demande)
-            return { dv: saved, promoted: true, promotedDepartement: demande.departement }
+            return { dv: saved, promoted: true, promotedDepartement: demande.departement, promotedCentre: demande.centre }
           }
         }
       }

@@ -25,7 +25,7 @@ export const getRavitaillement = async (req: Request, res: Response): Promise<vo
 }
 
 export const createRavitaillementHandler = async (req: Request, res: Response): Promise<void> => {
-  const { date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter } =
+  const { date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter, centre } =
     req.body as {
       date?: string
       vehicule_id?: number
@@ -33,6 +33,7 @@ export const createRavitaillementHandler = async (req: Request, res: Response): 
       commentaire?: string
       kilometrage?: number
       n_liter?: number
+      centre?: string | null
     }
 
   if (!date || vehicule_id == null || montant_ravitaille == null) {
@@ -40,12 +41,13 @@ export const createRavitaillementHandler = async (req: Request, res: Response): 
   }
 
   try {
-    const r = await ravitaillementService.create({ date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter })
+    const r = await ravitaillementService.create({ date, vehicule_id, montant_ravitaille, commentaire, kilometrage, n_liter, centre })
     res.status(201).json(r)
   } catch (err: any) {
     if (err.code === 'ER_NO_REFERENCED_ROW_2') {
       res.status(404).json({ error: 'Véhicule introuvable' }); return
     }
+    if (err.status) { res.status(err.status).json({ error: err.message }); return }
     console.error('[POST /ravitaillements]', err)
     res.status(500).json({ error: 'Erreur serveur' })
   }

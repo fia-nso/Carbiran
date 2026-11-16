@@ -3,4 +3,6 @@ export {
   notifyByRole,
   notifyByRoles,
   notifyByRoleAndDept,
+  notifyByRoleAndCentre,
+  notifyStationDuCentre,
 } from '../services/notificationService'

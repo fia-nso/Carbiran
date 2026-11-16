@@ -105,3 +105,15 @@ export class CentreService {
     return repo().save(centre)
   }
 }
+
+/** Libellé lisible d'un centre pour les messages : « Zone B — KIFFA » (repli : le code seul). */
+export async function libelleCentre(code: string | null | undefined): Promise<string> {
+  const c = normaliserCodeCentre(code ?? null)
+  if (!c) return '—'
+  try {
+    const centre = await repo().findOne({ where: { code: c }, select: { code: true, zone: true } })
+    return centre ? `${centre.zone} — ${centre.code}` : c
+  } catch {
+    return c
+  }
+}
