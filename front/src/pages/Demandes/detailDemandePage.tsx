@@ -18,6 +18,7 @@ import {
 import type { SignatureSituation, CircuitStep } from "@/hooks/useSignatures";
 import { uploadPhoto } from "@/lib/uploadPhoto";
 import { APP_URL } from "@/lib/env";
+import { toNumber, sumBy } from "@/lib/numbers";
 import type {
   DemandeRavitaillement,
   DemandeVehicule,
@@ -57,11 +58,11 @@ interface VehiculeInfo {
 // Print helpers
 // ---------------------------------------------------------------------------
 
-function formatNumber(value: number) {
+function formatNumber(value: unknown) {
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(toNumber(value));
 }
 
 function escapeHtml(value: string) {
@@ -73,7 +74,8 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function numberToWordsFr(n: number): string {
+function numberToWordsFr(value: unknown): string {
+  const n = toNumber(value);
   const intPart = Math.floor(Math.abs(n));
   const ones = [
     "", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf",
@@ -488,9 +490,9 @@ export default function DetailDemandePage() {
 
       await apiCreateRavitaillement({
         vehicule_id:        dv.vehicule_id,
-        montant_ravitaille: dv.montant ?? 0,
-        n_liter:            dv.n_liter ?? 0,
-        kilometrage:        dv.kilometrage ?? 0,
+        montant_ravitaille: toNumber(dv.montant),
+        n_liter:            toNumber(dv.n_liter),
+        kilometrage:        toNumber(dv.kilometrage),
         date:               new Date().toISOString().split("T")[0],
         commentaire:        "Ravitaillement validé par la Cellule CSÉ",
         // Centre de la demande (et non le centre actuel du véhicule, qui peut avoir changé).
@@ -637,7 +639,7 @@ export default function DetailDemandePage() {
     const dept         = demande.departement;
     const today        = new Date().toLocaleDateString("fr-FR");
     const dateStr      = new Date(demande.created_at).toLocaleDateString("fr-FR");
-    const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
+    const totalMontant = sumBy(items, (dv) => dv.montant);
 
     const rowsHtml = items
       .map(
@@ -1662,8 +1664,8 @@ function SituationApercu({
   const isDC       = dept === "DC";
   const today      = new Date().toLocaleDateString("fr-FR");
   const dateStr    = new Date(demande.created_at).toLocaleDateString("fr-FR");
-  const totalMontant = items.reduce((sum, dv) => sum + (dv.montant ?? 0), 0);
-  const totalLitres  = items.reduce((sum, dv) => sum + (dv.n_liter  ?? 0), 0);
+  const totalMontant = sumBy(items, (dv) => dv.montant);
+  const totalLitres  = sumBy(items, (dv) => dv.n_liter);
 
   const alreadySigned = userCircuitRole ? hasAlreadySigned(signatures, userCircuitRole) : false;
 
@@ -2237,7 +2239,7 @@ function AmountCell({ label, value, unit }: { label: string; value?: number; uni
     <div>
       <p className="text-xs text-gray-400">{label}</p>
       <p className="font-semibold text-gray-900">
-        {value != null ? `${value.toLocaleString("fr-FR")} ${unit}` : "—"}
+        {value != null ? `${toNumber(value).toLocaleString("fr-FR")} ${unit}` : "—"}
       </p>
     </div>
   );

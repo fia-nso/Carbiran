@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiGetBon } from "@/lib/api";
 import { CIRCUIT_BONS } from "@/hooks/useSignatures";
+import { toNumber } from "@/lib/numbers";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatNumber(value: number) {
+function formatNumber(value: unknown) {
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(toNumber(value));
 }
 
 const normalizeZone = (zone: string) => zone?.trim().toLowerCase();

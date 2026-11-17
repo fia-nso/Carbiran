@@ -12,6 +12,7 @@ import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useVehicules } from "@/hooks/useVehicule";
 import { APP_URL } from "@/lib/env";
 import type { RavitaillementVehicule } from "@/types";
+import { toNumber, sumBy } from "@/lib/numbers";
 
 type RavitaillementDraft = {
   date: string | null;
@@ -112,11 +113,11 @@ function formatDateForDisplay(value: string | null | undefined) {
   return date.toLocaleDateString("fr-FR");
 }
 
-function formatNumber(value: number) {
+function formatNumber(value: unknown) {
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(toNumber(value));
 }
 
 function escapeHtml(value: string) {
@@ -233,8 +234,8 @@ export default function RavitaillementVehiculePage() {
 
   const stats = {
     total: displayedRavitaillements.length,
-    litres: displayedRavitaillements.reduce((sum, item) => sum + item.nLiter, 0),
-    montantRavitaille: displayedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0),
+    litres: sumBy(displayedRavitaillements, (item) => item.nLiter),
+    montantRavitaille: sumBy(displayedRavitaillements, (item) => item.montantRavitaille),
   };
   const displayedIds = useMemo(
     () => displayedRavitaillements.map((item) => item.id),
@@ -335,10 +336,7 @@ export default function RavitaillementVehiculePage() {
       )
       .join("");
 
-    const totalMontant = selectedRavitaillements.reduce(
-      (sum, item) => sum + item.montantRavitaille,
-      0
-    );
+    const totalMontant = sumBy(selectedRavitaillements, (item) => item.montantRavitaille);
     printWindow.document.write(`
       <!doctype html>
       <html lang="fr">
@@ -536,7 +534,7 @@ export default function RavitaillementVehiculePage() {
     const zone = allZones[0] ?? "—";
     const isDC   = normalizeZone(zone) === "dc";
     const today = new Date().toLocaleDateString("fr-FR");
-    const totalMontant = selectedRavitaillements.reduce((sum, item) => sum + item.montantRavitaille, 0);
+    const totalMontant = sumBy(selectedRavitaillements, (item) => item.montantRavitaille);
 
     const rowsHtml = selectedRavitaillements
       .map(

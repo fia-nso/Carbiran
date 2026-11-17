@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { writeActivityLogSafe } from "@/lib/activityLogs";
 import type { RavitaillementVehicule, Vehicule } from "@/types";
+import { toNumber } from "@/lib/numbers";
 
 interface RavitaillementRow {
   id: number;
@@ -65,10 +66,10 @@ function mapRow(row: RavitaillementRow): RavitaillementVehicule {
     date: row.date,
     vehiculeId: row.vehicule_id,
     vehicule,
-    montantRavitaille: Number(row.montant_ravitaille || 0),
+    montantRavitaille: toNumber(row.montant_ravitaille),
     commentaire: row.commentaire || "",
-    kilometrage: Number(row.kilometrage || 0),
-    nLiter: Number(row.n_liter || 0),
+    kilometrage: toNumber(row.kilometrage),
+    nLiter: toNumber(row.n_liter),
     centre: row.centre ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
