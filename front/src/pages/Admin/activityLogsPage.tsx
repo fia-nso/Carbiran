@@ -67,6 +67,8 @@ function getActionLabel(action: string) {
       return "Changement de mot de passe";
     case "REMOVE_VEHICULE":
       return "Retrait de vehicule";
+    case "ADD_VEHICULE":
+      return "Ajout de véhicule";
     default:
       return action;
   }
@@ -86,6 +88,7 @@ function getActionTone(action: string) {
     case "LOGOUT":
       return "bg-blue-100 text-blue-800 border border-blue-200";
     case "CREATE":
+    case "ADD_VEHICULE":
       return "bg-green-100 text-green-800 border border-green-200";
     default:
       return "bg-gray-100 text-gray-800 border border-gray-200";
@@ -93,10 +96,11 @@ function getActionTone(action: string) {
 }
 
 function getTargetLabel(log: ActivityLog) {
-  if (log.action === "REMOVE_VEHICULE") {
-    const retire = asObject(asObject(log.metadata)?.vehicule_retire);
-    if (typeof retire?.matricule === "string" && retire.matricule.trim()) {
-      return retire.matricule;
+  if (log.action === "REMOVE_VEHICULE" || log.action === "ADD_VEHICULE") {
+    const metadata = asObject(log.metadata);
+    const vehicule = asObject(log.action === "ADD_VEHICULE" ? metadata?.vehicule_ajoute : metadata?.vehicule_retire);
+    if (typeof vehicule?.matricule === "string" && vehicule.matricule.trim()) {
+      return vehicule.matricule;
     }
   }
 

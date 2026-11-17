@@ -397,38 +397,53 @@ export class DemandeService {
       const toRemove = existingDvs.filter((dv) => !keep.has(dv.vehicule_id))
       const toAdd = vehiculeIds.filter((vid) => !existingIds.has(vid))
 
-      if (isChefDept && toAdd.length > 0) {
-        throw Object.assign(
-          new Error("Le chef de département peut uniquement retirer des véhicules de la demande."),
-          { status: 403 }
-        )
-      }
-
-      // Véhicules ajoutés : même département et même centre que la demande.
+      // Véhicules ajoutés (cellule, chef de département, DC, créateur) :
+      // même département et même centre que la demande. Pour le chef de
+      // département, le département de la demande est déjà le sien (canEdit).
       await verifierVehiculesDemande(toAdd, demande.departement, demande.centre, em.getRepository(Vehicule))
 
       if (toRemove.length > 0) {
         await em.remove(DemandeVehicule, toRemove)
       }
 
+      let addedDvs: DemandeVehicule[] = []
       if (toAdd.length > 0) {
         const dvs = toAdd.map((vid) =>
           em.create(DemandeVehicule, { demande_id: id, vehicule_id: vid, statut: 'en_attente' })
         )
-        await em.save(DemandeVehicule, dvs)
+        addedDvs = await em.save(DemandeVehicule, dvs)
       }
 
       const afterVehicules = await em.find(Vehicule, { where: { id: In(vehiculeIds) } })
-      return { existingDvs, toRemove, toAdd, afterVehicules }
+      return { existingDvs, toRemove, toAdd, addedDvs, afterVehicules }
     })
 
-    // Journal : une entrée par véhicule retiré (hors transaction, ne bloque pas la modification).
-    if (result.toRemove.length > 0) {
+    // Journal : une entrée par véhicule retiré / ajouté (hors transaction, ne bloque pas la modification).
+    if (result.toRemove.length > 0 || result.addedDvs.length > 0) {
       const describe = (v: Vehicule | null | undefined, vid: number) =>
         v ? { id: v.id, matricule: v.matricule, vehicule: v.vehicule } : { id: vid }
       const avant = result.existingDvs.map((dv) => describe(dv.vehicule, dv.vehicule_id))
       const apres = vehiculeIds.map((vid) => describe(result.afterVehicules.find((v) => v.id === vid), vid))
       const logService = new LogService()
+
+      for (const dv of result.addedDvs) {
+        const v = describe(result.afterVehicules.find((x) => x.id === dv.vehicule_id), dv.vehicule_id)
+        const label = 'matricule' in v ? `${v.matricule}` : `#${dv.vehicule_id}`
+        await logService
+          .create({
+            user_id: userId,
+            user_email: user.email,
+            module: 'demandes',
+            action: 'ADD_VEHICULE',
+            target_table: 'demande_vehicules',
+            target_id: dv.id,
+            description: `Ajout du véhicule ${label} à la demande ${demande.departement} (${demande.id}) par ${role}.`,
+            before_data: { demande_id: demande.id, statut: demande.statut, vehicules: avant },
+            after_data: { demande_id: demande.id, statut: demande.statut, vehicules: apres },
+            metadata: { departement: demande.departement, centre: demande.centre, role, circuit_role: circuitRole, vehicule_ajoute: v, demande_vehicule: { id: dv.id, statut: dv.statut } },
+          })
+          .catch((err) => console.error('[log ADD_VEHICULE]', err))
+      }
 
       for (const dv of result.toRemove) {
         const v = describe(dv.vehicule, dv.vehicule_id)

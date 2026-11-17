@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import QRCode from "qrcode";
 import { isAxiosError } from "axios";
 import { useParams, Link } from "react-router-dom";
-import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules, apiReplaceDemandeVehicules } from "@/lib/api";
+import { apiGetDemande, apiUpdateDemande, apiPatchDemandeVehicule, apiCreateRavitaillement, apiGetHistoriqueVehicules, apiReplaceDemandeVehicules, apiGetVehicules } from "@/lib/api";
+import { vehiculeDansDepartement } from "@/lib/departements";
 import { useAuthContext } from "@/context/AuthProvider";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
-import { useCentres } from "@/hooks/useCentres";
+import { normCentre, useCentres } from "@/hooks/useCentres";
 import {
   useSignatures,
   CIRCUIT_SITUATION,
@@ -52,6 +53,7 @@ interface VehiculeInfo {
   matricule: string;
   chauffeur_responsable: string | null;
   zone: string;
+  centre?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +236,14 @@ export default function DetailDemandePage() {
   const [retraitIds,            setRetraitIds]            = useState<Set<string>>(new Set());
   const [retraitError,          setRetraitError]          = useState<string | null>(null);
   const [retraitSuccess,        setRetraitSuccess]        = useState<string | null>(null);
+  // Chef de département (avant approbation) : ajout de véhicules (son département + centre de la demande)
+  const [ajoutOpen,             setAjoutOpen]             = useState(false);
+  const [ajoutCandidats,        setAjoutCandidats]        = useState<VehiculeInfo[] | null>(null);
+  const [ajoutLoading,          setAjoutLoading]          = useState(false);
+  const [ajoutSearch,           setAjoutSearch]           = useState("");
+  const [ajoutIds,              setAjoutIds]              = useState<Set<number>>(new Set());
+  const [ajoutError,            setAjoutError]            = useState<string | null>(null);
+  const [ajoutSuccess,          setAjoutSuccess]          = useState<string | null>(null);
 
   const isChefDeCours   = user?.role === "chef_de_cours";
   const isChefDept      = user?.role === "chef_departement";
@@ -396,6 +406,92 @@ export default function DetailDemandePage() {
         ? (err.response?.data as { error?: string } | undefined)?.error ?? err.message
         : err instanceof Error ? err.message : "Erreur lors du retrait des véhicules.";
       setRetraitError(message);
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  // Véhicules ajoutables : département ET centre de la demande, pas déjà dans la demande.
+  const ajoutDisponibles = useMemo(() => {
+    if (!demande || !ajoutCandidats) return [];
+    const dejaPresents = new Set((demande.demande_vehicules ?? []).map((dv) => dv.vehicule_id));
+    const centreDemande = normCentre(demande.centre);
+    const q = ajoutSearch.trim().toLowerCase();
+    return ajoutCandidats.filter(
+      (v) =>
+        !dejaPresents.has(v.id) &&
+        vehiculeDansDepartement(v.zone, demande.departement) &&
+        normCentre(v.centre) === centreDemande &&
+        (q === "" ||
+          v.matricule.toLowerCase().includes(q) ||
+          v.vehicule.toLowerCase().includes(q) ||
+          (v.chauffeur_responsable ?? "").toLowerCase().includes(q))
+    );
+  }, [demande, ajoutCandidats, ajoutSearch]);
+
+  async function ouvrirAjout() {
+    setAjoutOpen(true);
+    setAjoutError(null);
+    setAjoutSuccess(null);
+    if (ajoutCandidats) return;
+    setAjoutLoading(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = (await apiGetVehicules()) ?? [];
+      setAjoutCandidats(
+        rows.map((r) => ({
+          id: r.id,
+          vehicule: r.vehicule,
+          matricule: r.matricule,
+          chauffeur_responsable: r.chauffeur_responsable ?? null,
+          zone: r.zone,
+          centre: r.centre ?? null,
+        }))
+      );
+    } catch {
+      setAjoutError("Impossible de charger les véhicules.");
+    } finally {
+      setAjoutLoading(false);
+    }
+  }
+
+  function fermerAjout() {
+    setAjoutOpen(false);
+    setAjoutIds(new Set());
+    setAjoutSearch("");
+    setAjoutError(null);
+  }
+
+  function toggleAjout(vid: number) {
+    setAjoutError(null);
+    setAjoutSuccess(null);
+    setAjoutIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vid)) next.delete(vid);
+      else next.add(vid);
+      return next;
+    });
+  }
+
+  async function handleAjouterVehicules() {
+    if (!demande || ajoutIds.size === 0) return;
+    const actuels = (demande.demande_vehicules ?? []).map((dv) => dv.vehicule_id);
+    const nbAjoutes = ajoutIds.size;
+    setProcessing("ajout_vehicules");
+    setAjoutError(null);
+    setAjoutSuccess(null);
+    try {
+      await apiReplaceDemandeVehicules(demande.id, [...actuels, ...ajoutIds]);
+      setAjoutIds(new Set());
+      setAjoutSearch("");
+      setAjoutOpen(false);
+      setAjoutSuccess(`${nbAjoutes} véhicule(s) ajouté(s) à la demande.`);
+      await fetchDemande(true);
+    } catch (err: unknown) {
+      const message = isAxiosError(err)
+        ? (err.response?.data as { error?: string } | undefined)?.error ?? err.message
+        : err instanceof Error ? err.message : "Erreur lors de l'ajout des véhicules.";
+      setAjoutError(message);
     } finally {
       setProcessing(null);
     }
@@ -1036,8 +1132,14 @@ export default function DetailDemandePage() {
             <>
               <button
                 onClick={handleValiderDept}
-                disabled={processing === "valider_dept" || retraitIds.size > 0}
-                title={retraitIds.size > 0 ? "Retirez d'abord les véhicules décochés, ou recochez-les." : undefined}
+                disabled={processing === "valider_dept" || retraitIds.size > 0 || ajoutIds.size > 0}
+                title={
+                  retraitIds.size > 0
+                    ? "Retirez d'abord les véhicules décochés, ou recochez-les."
+                    : ajoutIds.size > 0
+                      ? "Ajoutez d'abord les véhicules sélectionnés, ou désélectionnez-les."
+                      : undefined
+                }
                 className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow text-sm font-medium disabled:opacity-50"
               >
                 {processing === "valider_dept" ? "Approbation…" : "Approuver la demande"}
@@ -1215,8 +1317,126 @@ export default function DetailDemandePage() {
                 ? "Retrait…"
                 : `Retirer la sélection${retraitIds.size > 0 ? ` (${retraitIds.size})` : ""}`}
             </button>
+            {!ajoutOpen && user?.departement === demande.departement && (
+              <button
+                type="button"
+                onClick={() => void ouvrirAjout()}
+                disabled={processing === "retrait_vehicules" || processing === "ajout_vehicules"}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-teal-300 text-teal-700 rounded-xl hover:bg-teal-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Ajouter des véhicules
+              </button>
+            )}
             {retraitError && <p className="text-sm text-red-600">{retraitError}</p>}
             {retraitSuccess && <p className="text-sm text-green-700">{retraitSuccess}</p>}
+            {!ajoutOpen && ajoutSuccess && <p className="text-sm text-green-700">{ajoutSuccess}</p>}
+          </div>
+
+          {ajoutOpen && (
+            <div className="border-t border-gray-200 bg-gray-50">
+              <div className="px-6 py-4 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Ajouter des véhicules</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Véhicules du département {demande.departement}
+                    {demande.centre ? ` et du centre ${libelleCentre(demande.centre)}` : ""} qui ne sont pas déjà dans la demande.
+                  </p>
+                </div>
+                <input
+                  type="search"
+                  value={ajoutSearch}
+                  onChange={(e) => setAjoutSearch(e.target.value)}
+                  placeholder="Rechercher (matricule, véhicule, chauffeur)…"
+                  className="w-full min-h-[44px] px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <div className="max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+                  {ajoutLoading ? (
+                    <p className="px-4 py-6 text-center text-sm text-gray-400">Chargement des véhicules…</p>
+                  ) : ajoutDisponibles.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-sm text-gray-400">
+                      {ajoutSearch.trim() ? "Aucun véhicule ne correspond à la recherche." : "Aucun autre véhicule disponible pour ce département et ce centre."}
+                    </p>
+                  ) : (
+                    ajoutDisponibles.map((v) => (
+                      <label
+                        key={v.id}
+                        className={`flex items-center gap-4 px-4 min-h-[44px] py-3 cursor-pointer transition-colors ${
+                          ajoutIds.has(v.id) ? "bg-teal-50" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ajoutIds.has(v.id)}
+                          onChange={() => toggleAjout(v.id)}
+                          disabled={processing === "ajout_vehicules"}
+                          className="w-5 h-5 rounded text-teal-600 border-gray-300 focus:ring-teal-500 flex-shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900 truncate">{v.vehicule}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {v.matricule}
+                            {v.chauffeur_responsable ? ` · ${v.chauffeur_responsable}` : ""}
+                          </p>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAjouterVehicules}
+                    disabled={ajoutIds.size === 0 || processing === "ajout_vehicules"}
+                    className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing === "ajout_vehicules"
+                      ? "Ajout…"
+                      : `Ajouter la sélection${ajoutIds.size > 0 ? ` (${ajoutIds.size})` : ""}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fermerAjout}
+                    disabled={processing === "ajout_vehicules"}
+                    className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium disabled:opacity-50"
+                  >
+                    Fermer
+                  </button>
+                  {ajoutError && <p className="text-sm text-red-600">{ajoutError}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Chef de département, après approbation : liste des véhicules en lecture seule avec leur statut */}
+      {isChefDept && demande.statut !== "en_attente" && (
+        <div className="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <p className="text-sm font-semibold text-gray-700">
+              Véhicules de la demande ({demande.demande_vehicules?.length ?? 0})
+            </p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {(demande.demande_vehicules ?? []).map((dv) => {
+              const info = vehiculesMap[dv.vehicule_id];
+              return (
+                <div key={dv.id} className="flex items-center gap-4 px-4 sm:px-6 min-h-[44px] py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 truncate">
+                      {info?.vehicule ?? `Véhicule #${dv.vehicule_id}`}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {info?.matricule ?? "—"}
+                      {info?.chauffeur_responsable ? ` · ${info.chauffeur_responsable}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <DvStatutBadge statut={dv.statut} demandeStatut={demande.statut} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
