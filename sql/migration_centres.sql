@@ -6,7 +6,14 @@
 --
 -- QUAND : application ARRÊTÉE, APRÈS sauvegarde, AVANT de démarrer la
 --         nouvelle version du backend (qui contient les nouvelles entités).
--- RÉ-EXÉCUTABLE : oui (chaque étape vérifie si elle a déjà été faite).
+-- RÉ-EXÉCUTABLE : oui (chaque étape vérifie si elle a déjà été faite),
+--                 tant que le nouveau backend n'a pas encore été démarré.
+-- PRINCIPE DE LA PHOTO : le centre d'une demande et d'une ligne du journal
+--   est figé au moment où elles sont créées. Avant la généralisation, tout
+--   passait par Nouakchott : TOUTES les demandes et TOUTES les lignes du
+--   journal existantes reçoivent donc 'NKTT', quel que soit le centre ACTUEL
+--   du véhicule (un véhicule réaffecté depuis, ex. 1007AC00 passé à ATAR en
+--   août, garde ses anciens ravitaillements et ses anciennes demandes à NKTT).
 -- NB : en MySQL, les ALTER/CREATE TABLE valident implicitement la
 --      transaction : la sauvegarde ci-dessous est le vrai filet de sécurité.
 --
@@ -94,6 +101,12 @@ UPDATE `users`
 
 -- ---------------------------------------------------------------------
 -- 4. Centre sur chaque ligne du journal des ravitaillements (photo)
+--    Toutes les lignes existantes -> 'NKTT' (tout passait par Nouakchott
+--    avant la généralisation). On n'utilise PAS le centre actuel du
+--    véhicule : un véhicule réaffecté depuis (ex. 1007AC00 -> ATAR) verrait
+--    à tort ses anciens ravitaillements rangés dans son nouveau centre.
+--    Pas de jointure sur `vehicules` : les lignes dont le véhicule a été
+--    supprimé reçoivent aussi 'NKTT'.
 -- ---------------------------------------------------------------------
 SET @ddl := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -102,10 +115,9 @@ SET @ddl := IF(
   'SELECT ''ravitaillements_vehicules.centre existe deja'' AS info');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-UPDATE `ravitaillements_vehicules` r
-  JOIN `vehicules` v ON v.`id` = r.`vehicule_id`
-   SET r.`centre` = v.`centre`
- WHERE r.`centre` IS NULL;
+UPDATE `ravitaillements_vehicules`
+   SET `centre` = 'NKTT'
+ WHERE `centre` IS NULL OR `centre` = '';
 
 -- =====================================================================
 -- VÉRIFICATIONS (à lancer après le script ; résultats attendus en commentaire)
@@ -118,19 +130,55 @@ SELECT zone, COUNT(*) AS nb, GROUP_CONCAT(code ORDER BY code) AS codes FROM cent
 -- V2. Toutes les demandes sont à NKTT (aujourd'hui : 72 lignes, 1 seul groupe)
 SELECT centre, COUNT(*) AS nb FROM demandes_ravitaillement GROUP BY centre;
 
--- V3. Aucune demande ne contient un véhicule d'un autre centre (attendu : 0)
-SELECT COUNT(*) AS demandes_incoherentes
+-- V3. INFORMATIF — CE N'EST PAS UNE ERREUR.
+--     Demandes dont un véhicule est AUJOURD'HUI rattaché à un autre centre
+--     que celui de la demande. C'est attendu : une demande garde le centre
+--     de sa création (principe de la photo), même si le véhicule a été
+--     réaffecté depuis. Ex. serveur : 1007AC00 réaffecté à ATAR en août ->
+--     ses anciennes demandes NKTT apparaissent ici (17 sur le serveur).
+--     Le nombre n'a pas à valoir 0 ; à relire seulement pour repérer un cas
+--     inattendu (véhicule sans centre, centre inconnu, demande récente).
+SELECT COUNT(DISTINCT d.id) AS demandes_avec_vehicule_reaffecte_INFO
   FROM demandes_ravitaillement d
- WHERE EXISTS (SELECT 1 FROM demande_vehicules dv JOIN vehicules v ON v.id = dv.vehicule_id
-                WHERE dv.demande_id = d.id AND (v.centre IS NULL OR v.centre <> d.centre));
+  JOIN demande_vehicules dv ON dv.demande_id = d.id
+  JOIN vehicules v          ON v.id = dv.vehicule_id
+ WHERE v.centre IS NULL OR v.centre <> d.centre;
+
+SELECT d.id                 AS demande_id,
+       d.created_at         AS demande_creee_le,
+       d.departement,
+       d.centre             AS centre_demande,
+       d.statut             AS statut_demande,
+       v.matricule,
+       v.centre             AS centre_actuel_vehicule,
+       dv.statut            AS statut_vehicule_dans_demande,
+       'Information : vehicule reaffecte depuis, pas une erreur' AS remarque
+  FROM demandes_ravitaillement d
+  JOIN demande_vehicules dv ON dv.demande_id = d.id
+  JOIN vehicules v          ON v.id = dv.vehicule_id
+ WHERE v.centre IS NULL OR v.centre <> d.centre
+ ORDER BY v.matricule, d.created_at;
 
 -- V4. Rattachement des utilisateurs : chef_de_cours x2 (dont celui du DC) et
 --     responsable_station x1 à NKTT ; tous les autres rôles (dont 'assistant') à NULL
 SELECT role, departement, centre, COUNT(*) AS nb FROM users GROUP BY role, departement, centre ORDER BY role;
 
--- V5. Journal : aucune ligne sans centre (attendu : 0 ; aujourd'hui 303 lignes toutes NKTT)
-SELECT COUNT(*) AS rav_sans_centre FROM ravitaillements_vehicules WHERE centre IS NULL;
+-- V5. Journal : TOUTES les lignes existantes sont à NKTT, y compris celles
+--     d'un véhicule réaffecté depuis (ex. les 19 de 1007AC00, aujourd'hui ATAR).
+--     Attendu juste après la migration :
+--       rav_sans_centre = 0 et rav_hors_nktt = 0 ;
+--       un seul groupe : NKTT = nombre total de lignes (local : 303).
+SELECT COUNT(*) AS rav_sans_centre FROM ravitaillements_vehicules WHERE centre IS NULL OR centre = '';
+SELECT COUNT(*) AS rav_hors_nktt   FROM ravitaillements_vehicules WHERE centre <> 'NKTT';
 SELECT centre, COUNT(*) AS nb FROM ravitaillements_vehicules GROUP BY centre;
+
+--     Contrôle du cas 1007AC00 : ses lignes sont à NKTT même si le véhicule
+--     est aujourd'hui dans un autre centre (serveur : 19 lignes, ATAR).
+SELECT v.matricule, v.centre AS centre_actuel_vehicule, r.centre AS centre_journal, COUNT(*) AS nb
+  FROM ravitaillements_vehicules r
+  JOIN vehicules v ON v.id = r.vehicule_id
+ WHERE v.matricule = '1007AC00'
+ GROUP BY v.matricule, v.centre, r.centre;
 
 -- V6. Véhicules sans centre valide (centre NULL, vide ou absent de `centres`)
 --     Attendu : 0 ligne. Vérification complémentaire : MOTO1 -> BASSEKNOU, 4862BB00 -> NKTT.
